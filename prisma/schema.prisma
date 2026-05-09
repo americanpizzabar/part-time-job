@@ -1,0 +1,80 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model AllowanceConfig {
+  id        Int      @id @default(autoincrement())
+  period    String   // WEEKLY, BIWEEKLY, MONTHLY
+  amount    Float
+  startDate String   // "YYYY-MM-DD"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AggregationConfig {
+  id             Int      @id @default(autoincrement())
+  periodDays     Int      @default(7)
+  startDayOfWeek Int      @default(1) // 0=Sun, 1=Mon
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Chore {
+  id          Int             @id @default(autoincrement())
+  name        String
+  amount      Float
+  description String?
+  isActive    Boolean         @default(true)
+  schedules   ChoreSchedule[]
+  logs        ChoreLog[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model ChoreSchedule {
+  id            Int      @id @default(autoincrement())
+  chore         Chore    @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  choreId       Int
+  scheduleType  String   // DAILY, WEEKLY, SPECIFIC, NONE
+  daysOfWeek    String?  // JSON array of 0-6 (for WEEKLY)
+  specificDates String?  // JSON array of "YYYY-MM-DD" (for SPECIFIC)
+  startDate     String?  // "YYYY-MM-DD"
+  endDate       String?  // "YYYY-MM-DD"
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ChoreLog {
+  id          Int      @id @default(autoincrement())
+  chore       Chore    @relation(fields: [choreId], references: [id], onDelete: Cascade)
+  choreId     Int
+  date        String   // "YYYY-MM-DD"
+  completed   Boolean  @default(false)
+  isExtra     Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([choreId, date, isExtra])
+}
+
+model AllowancePeriod {
+  id          Int      @id @default(autoincrement())
+  startDate   String   // "YYYY-MM-DD"
+  endDate     String   // "YYYY-MM-DD"
+  baseAmount  Float    @default(0)
+  choreAmount Float    @default(0)
+  totalAmount Float    @default(0)
+  isPaid      Boolean  @default(false)
+  paidAt      DateTime?
+  notes       String?
+  snapshot    String?  // JSON snapshot of chore logs
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

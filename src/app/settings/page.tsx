@@ -1,0 +1,164 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { today, DAY_NAMES_JA } from "@/lib/dateUtils";
+
+interface Config {
+  allowance: { id: number; period: string; amount: number; startDate: string } | null;
+  aggregation: { id: number; periodDays: number; startDayOfWeek: number } | null;
+}
+
+const PERIOD_LABELS: Record<string, string> = {
+  WEEKLY: "週ごと",
+  BIWEEKLY: "2週ごと",
+  MONTHLY: "月ごと",
+};
+
+export default function SettingsPage() {
+  const [config, setConfig] = useState<Config | null>(null);
+  const [allowancePeriod, setAllowancePeriod] = useState("WEEKLY");
+  const [allowanceAmount, setAllowanceAmount] = useState("");
+  const [allowanceStart, setAllowanceStart] = useState(today());
+  const [periodDays, setPeriodDays] = useState("7");
+  const [startDayOfWeek, setStartDayOfWeek] = useState("1");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then(r => r.json())
+      .then((data: Config) => {
+        setConfig(data);
+        if (data.allowance) {
+          setAllowancePeriod(data.allowance.period);
+          setAllowanceAmount(String(data.allowance.amount));
+          setAllowanceStart(data.allowance.startDate);
+        }
+        if (data.aggregation) {
+          setPeriodDays(String(data.aggregation.periodDays));
+          setStartDayOfWeek(String(data.aggregation.startDayOfWeek));
+        }
+      });
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allowance: allowanceAmount
+            ? { period: allowancePeriod, amount: Number(allowanceAmount), startDate: allowanceStart }
+            : undefined,
+          aggregation: { periodDays: Number(periodDays), startDayOfWeek: Number(startDayOfWeek) },
+        }),
+      });
+      const data = await fetch("/api/config").then(r => r.json());
+      setConfig(data);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-gray-800">設定</h1>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+        <h2 className="font-bold text-gray-800">基本お小遣い設定</h2>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">支給周期</label>
+          <div className="flex gap-2">
+            {["WEEKLY", "BIWEEKLY", "MONTHLY"].map(p => (
+              <button
+                key={p}
+                onClick={() => setAllowancePeriod(p)}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all
+                  ${allowancePeriod === p ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600"}`}
+              >
+                {PERIOD_LABELS[p]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">金額（円）</label>
+          <input
+            type="number"
+            value={allowanceAmount}
+            onChange={e => setAllowanceAmount(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="500"
+            min="0"
+          />
+          <p className="text-xs text-gray-500 mt-1">お手伝いとは別に固定で支給される金額</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">開始日</label>
+          <input
+            type="date"
+            value={allowanceStart}
+            onChange={e => setAllowanceStart(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+        <h2 className="font-bold text-gray-800">集計期間設定</h2>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">集計期間（日数）</label>
+          <input
+            type="number"
+            value={periodDays}
+            onChange={e => setPeriodDays(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            min="1"
+            max="31"
+          />
+          <p className="text-xs text-gray-500 mt-1">デフォルトは7日（1週間）</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">週の開始曜日</label>
+          <div className="flex gap-1.5">
+            {DAY_NAMES_JA.map((name, i) => (
+              <button
+                key={i}
+                onClick={() => setStartDayOfWeek(String(i))}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all
+                  ${startDayOfWeek === String(i) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}
+                  ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : ""}`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={`w-full py-3.5 rounded-xl font-semibold transition-colors text-sm
+          ${saved ? "bg-green-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}
+          disabled:opacity-50`}
+      >
+        {saving ? "保存中..." : saved ? "✓ 保存しました" : "設定を保存する"}
+      </button>
+
+      {config?.allowance && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+          <div className="text-xs font-medium text-gray-500 mb-2">現在の設定</div>
+          <div className="text-sm text-gray-700 space-y-1">
+            <div>基本お小遣い: {config.allowance.amount}円 / {PERIOD_LABELS[config.allowance.period]}</div>
+            <div>集計期間: {config.aggregation?.periodDays ?? 7}日</div>
+            <div>週の開始: {DAY_NAMES_JA[config.aggregation?.startDayOfWeek ?? 1]}曜日</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
