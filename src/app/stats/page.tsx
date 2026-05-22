@@ -1,114 +1,229 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { formatJPY } from "@/lib/dateUtils";
+import { useState, useEffect, useCallback } from "react";
+import { addDays, subDays, getDay, getDaysInMonth, startOfYear, endOfYear, format } from "date-fns";
+import { formatJPY, toDateStr, today } from "@/lib/dateUtils";
 
-interface AllowancePeriod {
-  id: number;
-  startDate: string;
-  endDate: string;
-  baseAmount: number;
-  choreAmount: number;
-  totalAmount: number;
-  isPaid: boolean;
-  snapshot: string | null;
-}
-
-interface ChoreStats {
-  name: string;
+interface ChoreStatItem {
+  choreId: number;
+  choreName: string;
   amount: number;
-  totalScheduled: number;
-  totalCompleted: number;
-  totalEarned: number;
+  scheduled: number;
+  completed: number;
+  earned: number;
   rate: number;
 }
 
+interface WeeklyTrendItem {
+  label: string;
+  rate: number;
+  earned: number;
+}
+
+interface StatsData {
+  choreStats: ChoreStatItem[];
+  totalScheduled: number;
+  totalCompleted: number;
+  totalEarned: number;
+  overallRate: number;
+  weeklyTrend: WeeklyTrendItem[];
+  dates: { startDate: string; endDate: string; dayCount: number };
+}
+
+type PresetKey = "today" | "week" | "month" | "year" | "custom";
+
+const PRESETS: { key: PresetKey; label: string }[] = [
+  { key: "today", label: "今日" },
+  { key: "week", label: "今週" },
+  { key: "month", label: "今月" },
+  { key: "year", label: "今年" },
+  { key: "custom", label: "カスタム" },
+];
+
+function computePresetRange(
+  preset: PresetKey,
+  startDayOfWeek: number
+): { startDate: string; endDate: string } {
+  const todayDate = new Date(today() + "T00:00:00");
+
+  switch (preset) {
+    case "today":
+      return { startDate: today(), endDate: today() };
+
+    case "week": {
+      const dayDiff = (getDay(todayDate) - startDayOfWeek + 7) % 7;
+      const weekStart = subDays(todayDate, dayDiff);
+      return {
+        startDate: toDateStr(weekStart),
+        endDate: toDateStr(addDays(weekStart, 6)),
+      };
+    }
+
+    case "month": {
+      const monthStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+      const monthEnd = new Date(
+        todayDate.getFullYear(),
+        todayDate.getMonth(),
+        getDaysInMonth(monthStart)
+      );
+      return { startDate: toDateStr(monthStart), endDate: toDateStr(monthEnd) };
+    }
+
+    case "year": {
+      const yearStart = startOfYear(todayDate);
+      const yearEnd = endOfYear(todayDate);
+      return { startDate: toDateStr(yearStart), endDate: toDateStr(yearEnd) };
+    }
+
+    default:
+      return { startDate: today(), endDate: today() };
+  }
+}
+
+function rateColor(rate: number) {
+  if (rate >= 80) return "#22c55e";
+  if (rate >= 50) return "#3b82f6";
+  return "#f59e0b";
+}
+
 export default function StatsPage() {
-  const [periods, setPeriods] = useState<AllowancePeriod[]>([]);
+  const [preset, setPreset] = useState<PresetKey>("week");
+  const [customStart, setCustomStart] = useState(today());
+  const [customEnd, setCustomEnd] = useState(today());
+  const [startDayOfWeek, setStartDayOfWeek] = useState(1);
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/allowance").then(r => r.json()).then(setPeriods);
+    fetch("/api/config")
+      .then(r => r.json())
+      .then(data => setStartDayOfWeek(data.aggregation?.startDayOfWeek ?? 1));
   }, []);
 
-  const choreStatsMap: Record<string, ChoreStats> = {};
-  let totalEarned = 0;
-  let totalBase = 0;
+  const { startDate, endDate } = preset === "custom"
+    ? { startDate: customStart, endDate: customEnd }
+    : computePresetRange(preset, startDayOfWeek);
 
-  for (const period of periods) {
-    totalBase += period.baseAmount;
-    totalEarned += period.choreAmount;
-    if (!period.snapshot) continue;
-    const snapshot: Record<string, { name: string; amount: number; scheduled: number; completed: number }> =
-      JSON.parse(period.snapshot);
-    for (const item of Object.values(snapshot)) {
-      if (!choreStatsMap[item.name]) {
-        choreStatsMap[item.name] = { name: item.name, amount: item.amount, totalScheduled: 0, totalCompleted: 0, totalEarned: 0, rate: 0 };
-      }
-      choreStatsMap[item.name].totalScheduled += item.scheduled;
-      choreStatsMap[item.name].totalCompleted += item.completed;
-      choreStatsMap[item.name].totalEarned += item.completed * item.amount;
+  const fetchStats = useCallback(async () => {
+    if (!startDate || !endDate || startDate > endDate) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/stats?startDate=${startDate}&endDate=${endDate}`);
+      const data = await res.json();
+      setStats(data);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, [startDate, endDate]);
 
-  const choreStats = Object.values(choreStatsMap).map(s => ({
-    ...s,
-    rate: s.totalScheduled > 0 ? Math.round((s.totalCompleted / s.totalScheduled) * 100) : 0,
-  })).sort((a, b) => b.rate - a.rate);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  const overallRate = choreStats.length > 0
-    ? Math.round(choreStats.reduce((s, c) => s + c.rate, 0) / choreStats.length)
-    : 0;
+  const sorted = stats?.choreStats.slice().sort((a, b) => b.rate - a.rate) ?? [];
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-800">統計</h1>
 
-      {periods.length === 0 ? (
+      {/* 期間セレクター */}
+      <div className="space-y-2">
+        <div className="flex bg-white rounded-lg border border-gray-200 p-0.5 gap-0.5">
+          {PRESETS.map(p => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all
+                ${preset === p.key ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {preset === "custom" ? (
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-3">
+            <input
+              type="date"
+              value={customStart}
+              onChange={e => setCustomStart(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-gray-400 text-sm">〜</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={e => setCustomEnd(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        ) : (
+          <div className="text-center text-xs text-gray-500">
+            {startDate} 〜 {endDate}（{stats?.dates.dayCount ?? "…"}日間）
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-40">
+          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+        </div>
+      ) : !stats || stats.totalScheduled === 0 ? (
         <div className="text-center text-gray-400 py-12">
-          まだ集計データがありません。<br />
-          「お小遣い」ページで集計してください。
+          この期間にお手伝いのデータがありません
         </div>
       ) : (
         <>
+          {/* サマリーカード */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">集計回数</div>
-              <div className="text-2xl font-bold text-gray-800 mt-1">{periods.length}回</div>
+              <div className="text-xs text-gray-500">達成率</div>
+              <div
+                className="text-3xl font-bold mt-1"
+                style={{ color: rateColor(stats.overallRate) }}
+              >
+                {stats.overallRate}%
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {stats.totalCompleted}/{stats.totalScheduled}回
+              </div>
             </div>
             <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">お手伝い達成率</div>
-              <div className="text-2xl font-bold text-blue-600 mt-1">{overallRate}%</div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">基本お小遣い合計</div>
-              <div className="text-xl font-bold text-gray-800 mt-1">{formatJPY(totalBase)}</div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">お手伝い報酬合計</div>
-              <div className="text-xl font-bold text-green-600 mt-1">{formatJPY(totalEarned)}</div>
+              <div className="text-xs text-gray-500">お手伝い報酬</div>
+              <div className="text-2xl font-bold text-green-600 mt-1">
+                {formatJPY(stats.totalEarned)}
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {sorted.length}種類のお手伝い
+              </div>
             </div>
           </div>
 
+          {/* お手伝い別達成率 */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h2 className="font-bold text-gray-800 mb-4">お手伝い別の達成率</h2>
-            <div className="space-y-3">
-              {choreStats.map(stat => (
-                <div key={stat.name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">{stat.name}</span>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="text-gray-500">{stat.totalCompleted}/{stat.totalScheduled}回</span>
-                      <span className="font-semibold text-gray-800">{stat.rate}%</span>
-                      <span className="text-green-600 font-medium">{formatJPY(stat.totalEarned)}</span>
+            <div className="space-y-3.5">
+              {sorted.map(stat => (
+                <div key={stat.choreId}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-gray-700 truncate max-w-[40%]">
+                      {stat.choreName}
+                    </span>
+                    <div className="flex items-center gap-2 text-sm flex-shrink-0">
+                      <span className="text-gray-400">{stat.completed}/{stat.scheduled}回</span>
+                      <span
+                        className="font-bold w-10 text-right"
+                        style={{ color: rateColor(stat.rate) }}
+                      >
+                        {stat.rate}%
+                      </span>
+                      <span className="text-green-600 font-medium w-16 text-right">
+                        {formatJPY(stat.earned)}
+                      </span>
                     </div>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${stat.rate}%`,
-                        backgroundColor: stat.rate >= 80 ? "#22c55e" : stat.rate >= 50 ? "#3b82f6" : "#f59e0b",
-                      }}
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${stat.rate}%`, backgroundColor: rateColor(stat.rate) }}
                     />
                   </div>
                 </div>
@@ -116,40 +231,58 @@ export default function StatsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h2 className="font-bold text-gray-800 mb-3">期間別の履歴</h2>
-            <div className="space-y-2">
-              {periods.slice(0, 10).map(period => (
-                <div key={period.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <div className="text-sm font-medium text-gray-700">{period.startDate} 〜 {period.endDate}</div>
-                    <div className="text-xs text-gray-400">
-                      {period.snapshot
-                        ? (() => {
-                            const snap = JSON.parse(period.snapshot);
-                            const total = Object.values(snap).reduce((s: number, v: unknown) => {
-                              const item = v as { scheduled: number; completed: number };
-                              return s + item.scheduled;
-                            }, 0);
-                            const done = Object.values(snap).reduce((s: number, v: unknown) => {
-                              const item = v as { scheduled: number; completed: number };
-                              return s + item.completed;
-                            }, 0);
-                            return `${done}/${total}回完了`;
-                          })()
-                        : ""}
+          {/* 週ごとの推移（7日以上のみ） */}
+          {stats.weeklyTrend.length >= 2 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h2 className="font-bold text-gray-800 mb-4">週ごとの推移</h2>
+              <div className="space-y-2.5">
+                {stats.weeklyTrend.map((week, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1 text-sm">
+                      <span className="text-gray-600 text-xs">{week.label}</span>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="font-semibold"
+                          style={{ color: rateColor(week.rate) }}
+                        >
+                          {week.rate}%
+                        </span>
+                        <span className="text-green-600 font-medium text-xs">
+                          {formatJPY(week.earned)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${week.rate}%`, backgroundColor: rateColor(week.rate) }}
+                      />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-gray-800">{formatJPY(period.totalAmount)}</div>
-                    <div className={`text-xs ${period.isPaid ? "text-green-600" : "text-yellow-600"}`}>
-                      {period.isPaid ? "支払済" : "未払い"}
+                ))}
+              </div>
+
+              {/* 最高・最低週 */}
+              {stats.weeklyTrend.length >= 3 && (() => {
+                const best = stats.weeklyTrend.reduce((a, b) => a.rate >= b.rate ? a : b);
+                const worst = stats.weeklyTrend.reduce((a, b) => a.rate <= b.rate ? a : b);
+                return best.rate !== worst.rate ? (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex gap-3">
+                    <div className="flex-1 bg-green-50 rounded-lg p-2 text-center">
+                      <div className="text-xs text-green-600 font-medium">最高週</div>
+                      <div className="text-sm font-bold text-green-700 mt-0.5">{best.rate}%</div>
+                      <div className="text-xs text-green-500">{best.label}</div>
+                    </div>
+                    <div className="flex-1 bg-orange-50 rounded-lg p-2 text-center">
+                      <div className="text-xs text-orange-600 font-medium">最低週</div>
+                      <div className="text-sm font-bold text-orange-700 mt-0.5">{worst.rate}%</div>
+                      <div className="text-xs text-orange-500">{worst.label}</div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ) : null;
+              })()}
             </div>
-          </div>
+          )}
         </>
       )}
     </div>
