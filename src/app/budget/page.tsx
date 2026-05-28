@@ -14,6 +14,7 @@ interface Transaction {
   needsWants: string | null;
   date: string;
   memo: string | null;
+  imageUrl: string | null;
   isPrivate: boolean;
   source: string;
 }
@@ -212,7 +213,8 @@ export default function BudgetPage() {
               ) : (
                 <div className="space-y-2">
                   {selectedTx.map(t => (
-                    <div key={t.id} className="flex items-center gap-3 py-2 border-b last:border-0">
+                    <div key={t.id} className="py-2 border-b last:border-0">
+                    <div className="flex items-center gap-3">
                       <span className="text-xl">
                         {t.type === "INCOME" ? "💰" : CATEGORY_ICONS[t.category ?? "その他"] ?? "📦"}
                       </span>
@@ -238,6 +240,11 @@ export default function BudgetPage() {
                           </svg>
                         </button>
                       )}
+                    </div>
+                    {t.imageUrl && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={t.imageUrl} alt={t.category ?? "写真"} className="mt-2 w-full h-40 object-cover rounded-lg" />
+                    )}
                     </div>
                   ))}
                 </div>

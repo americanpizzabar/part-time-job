@@ -1,21 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useRole } from "@/lib/useRole";
 
 const items = [
   { href: "/chores", label: "お手伝い設定", icon: "📋", desc: "お手伝いの種類とスケジュール" },
   { href: "/allowance", label: "おこづかい集計", icon: "💰", desc: "期間ごとの集計・支払い管理" },
   { href: "/stats", label: "統計", icon: "📊", desc: "お手伝いの達成率・推移" },
-  { href: "/parent", label: "親ビュー", icon: "👪", desc: "残高・支出割合の確認、おねだり承認" },
+  { href: "/parent", label: "親ビュー", icon: "👪", desc: "残高・支出割合の確認、おねだり承認", parentOnly: true },
   { href: "/settings", label: "設定", icon: "⚙️", desc: "基本お小遣い・集計期間" },
 ];
 
 export default function MorePage() {
+  const { role, mounted } = useRole();
+  const visibleItems = items.filter(item => !item.parentOnly || (mounted && role === "PARENT"));
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-800">メニュー</h1>
       <div className="space-y-2">
-        {items.map(item => (
+        {visibleItems.map(item => (
           <Link
             key={item.href}
             href={item.href}

@@ -7,9 +7,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
+  const category = searchParams.get("category");
 
-  const where =
-    startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {};
+  const where = {
+    ...(startDate && endDate ? { date: { gte: startDate, lte: endDate } } : {}),
+    ...(category ? { category } : {}),
+  };
 
   const transactions = await prisma.transaction.findMany({
     where,
@@ -20,7 +23,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { type, amount, category, needsWants, date, memo, isPrivate } = body;
+  const { type, amount, category, needsWants, date, memo, isPrivate, imageUrl } = body;
 
   if (!type || amount === undefined || !date) {
     return NextResponse.json({ error: "type, amount, date are required" }, { status: 400 });
@@ -37,6 +40,7 @@ export async function POST(req: Request) {
       needsWants: type === "EXPENSE" ? needsWants ?? null : null,
       date,
       memo: memo ?? null,
+      imageUrl: type === "EXPENSE" ? imageUrl ?? null : null,
       isPrivate: Boolean(isPrivate),
       source: "MANUAL",
     },

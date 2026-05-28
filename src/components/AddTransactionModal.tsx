@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { today } from "@/lib/dateUtils";
 import { EXPENSE_CATEGORIES, CATEGORY_ICONS } from "@/lib/budget";
+import ImageUpload from "@/components/ImageUpload";
 
 interface AddTransactionModalProps {
   defaultDate?: string;
@@ -18,7 +19,10 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
   const [date, setDate] = useState(defaultDate ?? today());
   const [memo, setMemo] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const isLunch = type === "EXPENSE" && category === "昼食";
 
   async function handleSave() {
     if (!amount || Number(amount) <= 0) return;
@@ -35,6 +39,7 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
           date,
           memo,
           isPrivate,
+          imageUrl: isLunch ? imageUrl : undefined,
         }),
       });
       onSaved();
@@ -128,6 +133,14 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
                   ))}
                 </div>
               </div>
+
+              {isLunch && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">食べたものの写真</label>
+                  <p className="text-xs text-gray-500 mb-2">🍱 昼食の写真は親も見ることができます。</p>
+                  <ImageUpload value={imageUrl} onChange={setImageUrl} />
+                </div>
+              )}
             </>
           )}
 

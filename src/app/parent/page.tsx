@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { STATUS_LABELS, STATUS_COLORS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
+import { useRole } from "@/lib/useRole";
 
 interface Balance {
   wallet: number;
@@ -32,24 +33,36 @@ interface Presentation {
   imageUrl: string | null;
 }
 
+interface LunchRecord {
+  id: number;
+  date: string;
+  amount: number;
+  memo: string | null;
+  imageUrl: string | null;
+}
+
 export default function ParentPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [presentations, setPresentations] = useState<Presentation[]>([]);
+  const [lunches, setLunches] = useState<LunchRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<Presentation | null>(null);
   const [message, setMessage] = useState("");
+  const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [b, p] = await Promise.all([
+      const [b, p, l] = await Promise.all([
         fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
         fetch("/api/presentations").then(r => r.json()),
+        fetch(`/api/transactions?category=昼食&startDate=${start}&endDate=${end}`).then(r => r.json()),
       ]);
       setBalance(b);
       setPresentations(p);
+      setLunches((l as LunchRecord[]).filter(t => t.imageUrl));
     } finally {
       setLoading(false);
     }
@@ -69,6 +82,16 @@ export default function ParentPage() {
   }
 
   const pending = presentations.filter(p => p.status === "PENDING" || p.status === "HOLD");
+
+  if (mounted && role === "CHILD") {
+    return (
+      <div className="text-center text-gray-400 py-16 space-y-2">
+        <div className="text-4xl">🔒</div>
+        <p className="text-sm">この画面は親専用です。</p>
+        <p className="text-xs">設定で利用者を「親」に切り替えると表示されます。</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -118,6 +141,30 @@ export default function ParentPage() {
               </div>
             </>
           )}
+
+          {/* 昼食の記録 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">今月の昼食</h2>
+            {lunches.length === 0 ? (
+              <div className="text-center text-gray-400 py-8 bg-white rounded-xl border border-gray-200">
+                写真付きの昼食記録はありません
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {lunches.map(l => (
+                  <div key={l.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={l.imageUrl!} alt="昼食" className="w-full h-28 object-cover" />
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">{l.date}</div>
+                      <div className="text-sm font-bold text-gray-700">{formatJPY(l.amount)}</div>
+                      {l.memo && <div className="text-xs text-gray-400 truncate">{l.memo}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* おねだり承認 */}
           <div>

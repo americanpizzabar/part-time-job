@@ -87,6 +87,7 @@ model Transaction {
   needsWants        String?  // NEEDS | WANTS (expense only)
   date              String   // "YYYY-MM-DD"
   memo              String?
+  imageUrl          String?  // 食事の写真など (data URL)
   isPrivate         Boolean  @default(false) // 親に詳細を見せない
   source            String   @default("MANUAL") // MANUAL | ALLOWANCE | PRESENTATION
   allowancePeriodId Int?     @unique

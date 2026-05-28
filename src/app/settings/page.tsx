@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { today, DAY_NAMES_JA } from "@/lib/dateUtils";
+import { useRole } from "@/lib/useRole";
 
 interface Config {
   allowance: { id: number; period: string; amount: number; startDate: string } | null;
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const [startDayOfWeek, setStartDayOfWeek] = useState("1");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { role, setRole, mounted } = useRole();
 
   useEffect(() => {
     fetch("/api/config")
@@ -66,6 +68,26 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">設定</h1>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <h2 className="font-bold text-gray-800">利用者</h2>
+        <p className="text-xs text-gray-500">この端末を使う人を選んでください。「子供」を選ぶと親ビューは表示されません。</p>
+        <div className="flex gap-2">
+          {([
+            { value: "PARENT", label: "親", icon: "👪" },
+            { value: "CHILD", label: "子供", icon: "🧒" },
+          ] as const).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setRole(opt.value)}
+              className={`flex-1 py-3 rounded-lg text-sm font-medium border transition-all
+                ${mounted && role === opt.value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600"}`}
+            >
+              <span className="mr-1">{opt.icon}</span>{opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
         <h2 className="font-bold text-gray-800">基本お小遣い設定</h2>
