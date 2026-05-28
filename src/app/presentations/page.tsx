@@ -23,6 +23,7 @@ export default function PresentationsPage() {
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<Presentation | null>(null);
 
   // form state
   const [itemName, setItemName] = useState("");
@@ -35,6 +36,8 @@ export default function PresentationsPage() {
   const requestAmount =
     totalAmount && selfAmount
       ? Math.max(0, Number(totalAmount) - Number(selfAmount))
+      : totalAmount
+      ? Number(totalAmount)
       : 0;
 
   const fetchData = useCallback(async () => {
@@ -49,24 +52,59 @@ export default function PresentationsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function handleCreate() {
+  function openCreate() {
+    setEditTarget(null);
+    setItemName(""); setReason(""); setTotalAmount(""); setSelfAmount(""); setImageUrl(null);
+    setShowForm(true);
+  }
+
+  function openEdit(p: Presentation) {
+    setEditTarget(p);
+    setItemName(p.itemName);
+    setReason(p.reason);
+    setTotalAmount(String(p.totalAmount));
+    setSelfAmount(String(p.selfAmount));
+    setImageUrl(p.imageUrl);
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditTarget(null);
+  }
+
+  async function handleSubmit() {
     if (!itemName || !reason || !totalAmount) return;
     setSaving(true);
     try {
-      await fetch("/api/presentations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName,
-          reason,
-          totalAmount: Number(totalAmount),
-          selfAmount: Number(selfAmount || 0),
-          requestAmount,
-          imageUrl,
-        }),
-      });
-      setItemName(""); setReason(""); setTotalAmount(""); setSelfAmount(""); setImageUrl(null);
-      setShowForm(false);
+      if (editTarget) {
+        await fetch(`/api/presentations/${editTarget.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemName,
+            reason,
+            totalAmount: Number(totalAmount),
+            selfAmount: Number(selfAmount || 0),
+            requestAmount,
+            imageUrl,
+          }),
+        });
+      } else {
+        await fetch("/api/presentations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemName,
+            reason,
+            totalAmount: Number(totalAmount),
+            selfAmount: Number(selfAmount || 0),
+            requestAmount,
+            imageUrl,
+          }),
+        });
+      }
+      closeForm();
       fetchData();
     } finally {
       setSaving(false);
@@ -74,7 +112,7 @@ export default function PresentationsPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("この申請を取り消しますか？")) return;
+    if (!confirm("この申請を削除しますか？")) return;
     await fetch(`/api/presentations/${id}`, { method: "DELETE" });
     fetchData();
   }
@@ -84,7 +122,7 @@ export default function PresentationsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">おねだりプレゼン</h1>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={openCreate}
           className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -143,27 +181,33 @@ export default function PresentationsPage() {
                   </div>
                 )}
 
-                {p.status === "PENDING" && (
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="text-xs text-blue-500 hover:text-blue-700 font-medium"
+                  >
+                    編集
+                  </button>
                   <button
                     onClick={() => handleDelete(p.id)}
-                    className="mt-3 text-xs text-gray-400 hover:text-red-500"
+                    className="text-xs text-gray-400 hover:text-red-500"
                   >
-                    申請を取り消す
+                    削除
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* 申請フォーム */}
+      {/* 申請フォーム / 編集フォーム */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white">
-              <h2 className="text-lg font-bold">おねだりプレゼン申請</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-lg font-bold">{editTarget ? "申請を編集" : "おねだりプレゼン申請"}</h2>
+              <button onClick={closeForm} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -220,11 +264,11 @@ export default function PresentationsPage() {
                 <span className="font-bold text-blue-800">{formatJPY(requestAmount)}</span>
               </div>
               <button
-                onClick={handleCreate}
+                onClick={handleSubmit}
                 disabled={saving || !itemName || !reason || !totalAmount}
                 className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {saving ? "送信中..." : "親に申請する"}
+                {saving ? "保存中..." : editTarget ? "変更を保存" : "親に申請する"}
               </button>
             </div>
           </div>

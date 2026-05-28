@@ -2,6 +2,7 @@ export const EXPENSE_CATEGORIES = [
   "友達と遊ぶ",
   "文房具",
   "買い食い",
+  "昼食",
   "趣味",
   "その他",
 ] as const;
@@ -12,6 +13,7 @@ export const CATEGORY_ICONS: Record<string, string> = {
   友達と遊ぶ: "🎮",
   文房具: "✏️",
   買い食い: "🍩",
+  昼食: "🍱",
   趣味: "🎨",
   その他: "📦",
 };
