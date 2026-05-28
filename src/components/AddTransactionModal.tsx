@@ -138,7 +138,7 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">食べたものの写真</label>
                   <p className="text-xs text-gray-500 mb-2">🍱 昼食の写真は親も見ることができます。</p>
-                  <ImageUpload value={imageUrl} onChange={setImageUrl} />
+                  <ImageUpload value={imageUrl} onChange={setImageUrl} allowCapture />
                 </div>
               )}
             </>
