@@ -65,6 +65,17 @@ export function formatJPY(amount: number): string {
   return `¥${amount.toLocaleString("ja-JP")}`;
 }
 
+export function monthRange(year: number, month0: number): { start: string; end: string } {
+  const start = new Date(year, month0, 1);
+  const end = new Date(year, month0 + 1, 0);
+  return { start: toDateStr(start), end: toDateStr(end) };
+}
+
+export function currentMonthRange(): { start: string; end: string } {
+  const now = new Date();
+  return monthRange(now.getFullYear(), now.getMonth());
+}
+
 export const DAY_NAMES_JA = ["日", "月", "火", "水", "木", "金", "土"];
 export const MONTH_NAMES_JA = [
   "1月", "2月", "3月", "4月", "5月", "6月",

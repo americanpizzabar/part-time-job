@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { addDays, subDays, getDay, getDaysInMonth } from "date-fns";
-import { today, toDateStr, formatJPY } from "@/lib/dateUtils";
+import { today, toDateStr, formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import DayView from "@/components/DayView";
+import BalanceCard from "@/components/BalanceCard";
 
 interface ChoreItem {
   id: number;
@@ -21,6 +23,22 @@ interface DayData {
   date: string;
   chores: ChoreItem[];
   totalAmount: number;
+}
+
+interface BalanceSummary {
+  wallet: number;
+  free: number;
+  saved: number;
+}
+
+interface GoalSummary {
+  id: number;
+  name: string;
+  progress: number;
+  saved: number;
+  targetAmount: number;
+  remaining: number;
+  isAchieved: boolean;
 }
 
 const RANGE_OPTIONS = ["1日", "3日", "1週間", "2週間", "1カ月"] as const;
@@ -73,6 +91,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [seeded, setSeeded] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [balance, setBalance] = useState<BalanceSummary | null>(null);
+  const [topGoal, setTopGoal] = useState<GoalSummary | null>(null);
 
   useEffect(() => {
     fetch("/api/config")
@@ -82,6 +102,18 @@ export default function HomePage() {
         setConfigLoaded(true);
       });
   }, []);
+
+  const fetchSummary = useCallback(async () => {
+    const [b, goals] = await Promise.all([
+      fetch("/api/balance").then(r => r.json()),
+      fetch("/api/goals").then(r => r.json()),
+    ]);
+    setBalance(b);
+    const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
+    setTopGoal(active.length > 0 ? active[0] : null);
+  }, []);
+
+  useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
   const { startDate, endDate } = computeRange(rangeIndex, offset, startDayOfWeek);
 
@@ -127,8 +159,33 @@ export default function HomePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">お手伝いカレンダー</h1>
+      {/* 残高サマリー */}
+      {balance && <BalanceCard wallet={balance.wallet} free={balance.free} saved={balance.saved} />}
+
+      {/* 貯金メーター（進行中の目標） */}
+      {topGoal && (
+        <Link href="/goals" className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 transition-all">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+              🎯 {topGoal.name}
+            </span>
+            <span className="text-xs text-gray-400">あと {formatJPY(topGoal.remaining)}</span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${topGoal.progress}%`, background: "linear-gradient(90deg,#3b82f6,#6366f1)" }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-1 text-xs">
+            <span className="font-medium text-blue-600">{topGoal.progress}% 達成</span>
+            <span className="text-gray-400">{formatJPY(topGoal.saved)} / {formatJPY(topGoal.targetAmount)}</span>
+          </div>
+        </Link>
+      )}
+
+      <div className="flex items-center justify-between pt-1">
+        <h1 className="text-xl font-bold text-gray-800">お手伝いカレンダー</h1>
         <div className="text-right">
           <div className="text-xs text-gray-500">表示期間の合計</div>
           <div className="text-lg font-bold text-green-600">{formatJPY(totalCompleted)}</div>

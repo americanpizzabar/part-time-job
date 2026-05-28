@@ -78,3 +78,57 @@ model AllowancePeriod {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model Transaction {
+  id                Int      @id @default(autoincrement())
+  type              String   // INCOME | EXPENSE
+  amount            Float
+  category          String?  // 友達と遊ぶ, 文房具, 買い食い, 趣味, その他 (expense only)
+  needsWants        String?  // NEEDS | WANTS (expense only)
+  date              String   // "YYYY-MM-DD"
+  memo              String?
+  isPrivate         Boolean  @default(false) // 親に詳細を見せない
+  source            String   @default("MANUAL") // MANUAL | ALLOWANCE | PRESENTATION
+  allowancePeriodId Int?     @unique
+  presentationId    Int?     @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model SavingsGoal {
+  id            Int                  @id @default(autoincrement())
+  name          String
+  targetAmount  Float
+  deadline      String?              // "YYYY-MM-DD"
+  imageUrl      String?              // data URL
+  isAchieved    Boolean              @default(false)
+  achievedAt    DateTime?
+  contributions SavingsTransaction[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model SavingsTransaction {
+  id        Int         @id @default(autoincrement())
+  goal      SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  goalId    Int
+  amount    Float       // 正=積立, 負=引き出し
+  date      String      // "YYYY-MM-DD"
+  memo      String?
+  createdAt DateTime    @default(now())
+}
+
+model PresentationRequest {
+  id            Int      @id @default(autoincrement())
+  itemName      String
+  reason        String
+  totalAmount   Float
+  selfAmount    Float
+  requestAmount Float
+  status        String   @default("PENDING") // PENDING | APPROVED | REJECTED | HOLD
+  parentMessage String?
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  respondedAt   DateTime?
+  updatedAt     DateTime @updatedAt
+}

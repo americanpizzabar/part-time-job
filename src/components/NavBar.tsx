@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "今日", icon: "🏠" },
-  { href: "/chores", label: "お手伝い", icon: "📋" },
-  { href: "/allowance", label: "お小遣い", icon: "💰" },
-  { href: "/stats", label: "統計", icon: "📊" },
-  { href: "/settings", label: "設定", icon: "⚙️" },
+  { href: "/", label: "ホーム", icon: "🏠" },
+  { href: "/budget", label: "かけいぼ", icon: "📒" },
+  { href: "/goals", label: "目標", icon: "🎯" },
+  { href: "/presentations", label: "おねだり", icon: "🙏" },
+  { href: "/more", label: "メニュー", icon: "☰" },
 ];
+
+const moreRoutes = ["/chores", "/allowance", "/stats", "/settings", "/parent"];
 
 export default function NavBar() {
   const pathname = usePathname();
@@ -18,7 +20,12 @@ export default function NavBar() {
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
       <div className="max-w-2xl mx-auto flex">
         {links.map(link => {
-          const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+          const active =
+            link.href === "/"
+              ? pathname === "/"
+              : link.href === "/more"
+                ? pathname.startsWith("/more") || moreRoutes.some(r => pathname.startsWith(r))
+                : pathname.startsWith(link.href);
           return (
             <Link
               key={link.href}
