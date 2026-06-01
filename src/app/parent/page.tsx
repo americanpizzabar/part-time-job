@@ -5,7 +5,9 @@ import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { STATUS_LABELS, STATUS_COLORS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
 import MissionManager from "@/components/MissionManager";
+import BoostSequence from "@/components/BoostSequence";
 import { useRole } from "@/lib/useRole";
+import { projectProgress, boostPerContribution } from "@/lib/optis";
 
 interface Balance {
   wallet: number;
@@ -34,6 +36,22 @@ interface Presentation {
   imageUrl: string | null;
 }
 
+interface ProjectItem {
+  id: number;
+  name: string;
+  targetAmount: number;
+  selfTarget: number;
+  parentBoostTotal: number;
+  plannedAmount: number;
+  selfSaved: number;
+  boostReleased: number;
+  status: string;
+  parentMessage: string | null;
+  pendingBoostCount: number;
+  boostPerStep: number;
+  remainingParentBoost: number;
+}
+
 interface LunchRecord {
   id: number;
   date: string;
@@ -46,9 +64,12 @@ export default function ParentPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [lunches, setLunches] = useState<LunchRecord[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<Presentation | null>(null);
   const [message, setMessage] = useState("");
+  const [boostAnim, setBoostAnim] = useState<{ mode: "boost" | "complete"; amount?: number; name: string } | null>(null);
+  const [projectMsg, setProjectMsg] = useState<Record<number, string>>({});
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
@@ -56,14 +77,16 @@ export default function ParentPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [b, p, l] = await Promise.all([
+      const [b, p, l, pr] = await Promise.all([
         fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
         fetch("/api/presentations").then(r => r.json()),
         fetch(`/api/transactions?category=昼食&startDate=${start}&endDate=${end}`).then(r => r.json()),
+        fetch("/api/projects").then(r => r.json()),
       ]);
       setBalance(b);
       setPresentations(p);
-      setLunches((l as LunchRecord[]).filter(t => t.imageUrl));
+      setLunches((l as LunchRecord[]).filter((t: LunchRecord) => t.imageUrl));
+      setProjects(pr);
     } finally {
       setLoading(false);
     }
@@ -82,7 +105,36 @@ export default function ParentPage() {
     fetchData();
   }
 
+  async function respondProject(projectId: number, action: "APPROVE" | "REJECT") {
+    await fetch(`/api/projects/${projectId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, message: projectMsg[projectId] ?? undefined }),
+    });
+    setProjectMsg(m => ({ ...m, [projectId]: "" }));
+    fetchData();
+  }
+
+  async function boostProject(project: ProjectItem) {
+    const res = await fetch(`/api/projects/${project.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "BOOST" }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setBoostAnim({
+        mode: data.justCompleted ? "complete" : "boost",
+        amount: data.boostAmount,
+        name: project.name,
+      });
+    }
+    fetchData();
+  }
+
   const pending = presentations.filter(p => p.status === "PENDING" || p.status === "HOLD");
+  const pendingProjects = projects.filter(p => p.status === "PENDING");
+  const activeProjects = projects.filter(p => p.status === "ACTIVE");
 
   if (mounted && role === "CHILD") {
     return (
@@ -95,6 +147,15 @@ export default function ParentPage() {
   }
 
   return (
+    <>
+      {boostAnim && (
+        <BoostSequence
+          mode={boostAnim.mode}
+          amount={boostAnim.amount}
+          projectName={boostAnim.name}
+          onClose={() => { setBoostAnim(null); fetchData(); }}
+        />
+      )}
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">親ビュー</h1>
@@ -166,6 +227,75 @@ export default function ParentPage() {
               </div>
             )}
           </div>
+
+          {/* マイ・プロジェクト 承認/ブースト */}
+          {(pendingProjects.length > 0 || activeProjects.length > 0) && (
+            <div>
+              <h2 className="font-bold text-gray-800 mb-2">
+                マイ・プロジェクト
+                {pendingProjects.length > 0 && (
+                  <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full">{pendingProjects.length} 申請中</span>
+                )}
+              </h2>
+              <div className="space-y-3">
+                {[...pendingProjects, ...activeProjects].map(project => {
+                  const prog = projectProgress(project);
+                  const boostStep = boostPerContribution(project.plannedAmount, project.selfTarget, project.parentBoostTotal);
+                  return (
+                    <div key={project.id} className="bg-white border border-gray-200 rounded-2xl p-4">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div>
+                          <div className="font-bold text-gray-800">{project.name}</div>
+                          <div className="text-xs text-gray-400">目標 {formatJPY(project.targetAmount)} / 自己 {formatJPY(project.selfTarget)} / ブースト {formatJPY(project.parentBoostTotal)}</div>
+                        </div>
+                      </div>
+
+                      {/* プログレス */}
+                      <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-1">
+                        <div className="h-full rounded-full flex" style={{ width: `${prog.progressPct}%` }}>
+                          <div style={{ width: `${project.selfSaved / Math.max(1, prog.total) * 100}%` }} className="bg-emerald-500" />
+                          <div style={{ width: `${project.boostReleased / Math.max(1, prog.total) * 100}%` }} className="bg-blue-400" />
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-400 mb-3">
+                        <span>🟢 自己 {formatJPY(project.selfSaved)}</span>
+                        <span>🔵 ブースト済 {formatJPY(project.boostReleased)} / {formatJPY(project.parentBoostTotal)}</span>
+                      </div>
+
+                      {/* PENDING: 承認 or 却下 */}
+                      {project.status === "PENDING" && (
+                        <div className="space-y-2">
+                          <input
+                            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-400"
+                            placeholder="メッセージ(任意)"
+                            value={projectMsg[project.id] ?? ""}
+                            onChange={e => setProjectMsg(m => ({ ...m, [project.id]: e.target.value }))}
+                          />
+                          <div className="flex gap-2">
+                            <button onClick={() => respondProject(project.id, "APPROVE")} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 text-sm font-semibold">承認 ✓</button>
+                            <button onClick={() => respondProject(project.id, "REJECT")} className="flex-1 bg-red-500 text-white rounded-xl py-2 text-sm font-semibold">却下</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ACTIVE: ブースト実行 */}
+                      {project.status === "ACTIVE" && project.pendingBoostCount > 0 && (
+                        <button
+                          onClick={() => boostProject(project)}
+                          className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-transform"
+                        >
+                          ⚡ 計画通りだね！ブースト実行 +{formatJPY(boostStep)}
+                        </button>
+                      )}
+                      {project.status === "ACTIVE" && project.pendingBoostCount === 0 && (
+                        <div className="text-center text-xs text-gray-400 py-1">積み立て待ち… (残ブースト {formatJPY(project.remainingParentBoost)})</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* シークレット・ミッション */}
           <MissionManager />
@@ -252,5 +382,6 @@ export default function ParentPage() {
         </>
       )}
     </div>
+    </>
   );
 }

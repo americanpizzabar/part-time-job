@@ -3,7 +3,7 @@
 // ============================================================
 
 export type Rarity = "COMMON" | "UNCOMMON" | "RARE" | "LEGENDARY";
-export type OptisForm = "LOGICAL" | "CREATIVE" | "HYBRID";
+export type OptisForm = "LOGICAL" | "CREATIVE" | "HYBRID" | "PROFESSIONAL";
 
 // --- 経験値 / レベル ---------------------------------------
 // レベルLからL+1に必要な経験値
@@ -40,14 +40,36 @@ export function evolutionStage(level: number): 1 | 2 | 3 {
   return 1;
 }
 
-// 過去14日のNeeds比率(%)から形態を決定
-export function formFromNeedsRatio(needsRatio: number): OptisForm {
+// 週予算の達成状況(直近の完了週)
+export interface BudgetResult {
+  budget: number;      // 設定された週予算
+  spent: number;       // その週の支出
+  usageRatio: number;  // 消費率(%)
+  withinBudget: boolean; // オーバーしていない
+  professional: boolean; // 90%以上消費 & オーバーなし = やりくりの達人
+}
+
+// 形態を決定: やりくり成功(プロフェッショナル)を最優先評価し、
+// 次にNeeds(自己投資)比率で分岐する。
+export function formFromState(needsRatio: number, budget: BudgetResult | null): OptisForm {
+  if (budget && budget.professional) return "PROFESSIONAL";
   if (needsRatio >= 60) return "LOGICAL";
   if (needsRatio <= 40) return "CREATIVE";
   return "HYBRID";
 }
 
+// 旧API互換(週予算が無い場合)
+export function formFromNeedsRatio(needsRatio: number): OptisForm {
+  return formFromState(needsRatio, null);
+}
+
 export const FORM_META: Record<OptisForm, { label: string; color: string; accent: string; desc: string }> = {
+  PROFESSIONAL: {
+    label: "プロフェッショナル形態",
+    color: "#10b981",
+    accent: "#34d399",
+    desc: "予算を90%以上使い切りつつ1円もオーバーしなかった、やりくりの達人の姿。最も美しくエネルギーに満ちている。",
+  },
   LOGICAL: {
     label: "ロジカル・ソリッド形態",
     color: "#3b82f6",
@@ -67,6 +89,27 @@ export const FORM_META: Record<OptisForm, { label: string; color: string; accent
     desc: "中庸を保つ流線型のデザイン。",
   },
 };
+
+// --- 覚醒(Needs自己投資による武器/パーツ強化) ------------------
+// 覚醒値 → ティア(0〜4)。装備エフェクトの強さに反映。
+export function awakeningTier(awakening: number): number {
+  if (awakening >= 40) return 4;
+  if (awakening >= 25) return 3;
+  if (awakening >= 12) return 2;
+  if (awakening >= 4) return 1;
+  return 0;
+}
+
+export const AWAKENING_LABEL: Record<number, string> = {
+  0: "ノーマル",
+  1: "+1 覚醒",
+  2: "+2 覚醒",
+  3: "+3 オーバードライブ",
+  4: "+4 トランセンド",
+};
+
+// Needs購入1件あたりの覚醒上昇
+export const AWAKENING_PER_NEEDS = 2;
 
 export const STAGE_LABEL: Record<number, string> = {
   1: "コア",
@@ -194,8 +237,51 @@ export function isInAfterschoolWindow(d: Date): boolean {
   return h >= AFTERSCHOOL_START_HOUR && h < AFTERSCHOOL_END_HOUR;
 }
 
-// Dark Web Mode 解放時間帯(21:00-24:00)
+// Dark Web Mode 解放時間帯(21:00-24:00) → バジェット・シミュレーター
 export function isDarkWebHour(d: Date = new Date()): boolean {
   const h = d.getHours();
   return h >= 21 && h <= 23;
+}
+
+// --- マイ・プロジェクト(クラファン型 親子マッチング投資) ----------
+// 子の計画的積立1回あたりに連動して親が放出するブースト額。
+// 比率 = 親出資総額 / 自己原資目標。
+export function boostPerContribution(plannedAmount: number, selfTarget: number, parentBoostTotal: number): number {
+  if (selfTarget <= 0) return 0;
+  return Math.round(plannedAmount * (parentBoostTotal / selfTarget));
+}
+
+export interface ProjectProgress {
+  total: number;        // selfSaved + boostReleased
+  selfSaved: number;
+  boostReleased: number;
+  targetAmount: number;
+  selfTarget: number;
+  parentBoostTotal: number;
+  progressPct: number;
+  selfPct: number;
+  remaining: number;
+  completed: boolean;
+}
+
+export function projectProgress(p: {
+  selfSaved: number;
+  boostReleased: number;
+  targetAmount: number;
+  selfTarget: number;
+  parentBoostTotal: number;
+}): ProjectProgress {
+  const total = p.selfSaved + p.boostReleased;
+  return {
+    total,
+    selfSaved: p.selfSaved,
+    boostReleased: p.boostReleased,
+    targetAmount: p.targetAmount,
+    selfTarget: p.selfTarget,
+    parentBoostTotal: p.parentBoostTotal,
+    progressPct: p.targetAmount > 0 ? Math.min(100, Math.round((total / p.targetAmount) * 100)) : 0,
+    selfPct: p.selfTarget > 0 ? Math.min(100, Math.round((p.selfSaved / p.selfTarget) * 100)) : 0,
+    remaining: Math.max(0, p.targetAmount - total),
+    completed: total >= p.targetAmount,
+  };
 }

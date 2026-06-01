@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { today } from "@/lib/dateUtils";
-import { getOptisState, parseUnlocked } from "@/lib/optisServer";
+import { getOptisState, parseUnlocked, isRouletteBoostEligible } from "@/lib/optisServer";
 import { rollRarity, pickReward, RARITY_META } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,8 @@ export async function POST() {
     return NextResponse.json({ error: "本日のルーレットは回し済みです", already: true }, { status: 409 });
   }
 
-  const boosted = state.nmdDate === todayStr; // NMD達成で確変
+  // 確変: 計画通りの支出 or Needs(自己投資)記録で確率2倍(NMDは補助的扱い)
+  const boosted = (await isRouletteBoostEligible(todayStr)) || state.nmdDate === todayStr;
   const rarity = rollRarity(boosted);
   const unlocked = parseUnlocked(state.unlockedParts);
   const reward = pickReward(rarity, unlocked);

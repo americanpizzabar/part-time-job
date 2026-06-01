@@ -150,8 +150,40 @@ model OptisState {
   lastChestWeek    String?   // 直近チェスト受領週 "YYYY-MM-DD"(週開始日)
   nmdDate          String?   // ノーマネーデー申告日 "YYYY-MM-DD"
   freezeUntil      DateTime? // 凍結解除時刻(不正検知ペナルティ)
+  awakening        Int       @default(0) // Needs(自己投資)購入で蓄積する覚醒値
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+}
+
+// マイ・プロジェクト(クラファン型 親子マッチング投資)
+model Project {
+  id               Int                   @id @default(autoincrement())
+  name             String
+  imageUrl         String?
+  targetAmount     Int                   // 目標総額
+  selfTarget       Int                   // 自己原資の目標
+  parentBoostTotal Int                   // 親の出資総額
+  plannedAmount    Int                   // 計画的に1回で回す額
+  selfSaved        Int                   @default(0) // 自分で積み立てた累計
+  boostReleased    Int                   @default(0) // 親が放出済みの累計
+  status           String                @default("PENDING") // PENDING | ACTIVE | COMPLETED | REJECTED
+  parentMessage    String?
+  createdAt        DateTime              @default(now())
+  approvedAt       DateTime?
+  completedAt      DateTime?
+  updatedAt        DateTime              @updatedAt
+  contributions    ProjectContribution[]
+}
+
+model ProjectContribution {
+  id          Int      @id @default(autoincrement())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   Int
+  amount      Int
+  type        String   // SELF | BOOST
+  boostStatus String?  // SELF積立がブースト待ち/放出済か: PENDING | RELEASED
+  date        String   // "YYYY-MM-DD"
+  createdAt   DateTime @default(now())
 }
 
 // ルーレット/チェストの報酬履歴

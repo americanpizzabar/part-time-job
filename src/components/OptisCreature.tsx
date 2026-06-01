@@ -10,6 +10,7 @@ interface OptisCreatureProps {
   animClass?: string;
   frozen?: boolean;
   size?: number;
+  awakeningTier?: number; // 0-4: 装備エフェクトの強化度
   onCorePointerDown?: () => void;
   onCorePointerUp?: () => void;
 }
@@ -22,6 +23,8 @@ const BODY_PATHS: Record<OptisForm, string> = {
   CREATIVE: "M100 60 C142 60 160 88 158 118 C156 152 132 172 100 172 C68 172 44 152 42 118 C40 88 58 60 100 60 Z",
   // カプセル: 流線型
   HYBRID: "M100 60 C134 60 152 84 152 116 C152 150 132 172 100 172 C68 172 48 150 48 116 C48 84 66 60 100 60 Z",
+  // プロフェッショナル: 洗練されたダイヤカット型(やりくりの達人)
+  PROFESSIONAL: "M100 58 L138 78 L152 116 L128 162 L100 174 L72 162 L48 116 L62 78 Z",
 };
 
 export default function OptisCreature({
@@ -32,6 +35,7 @@ export default function OptisCreature({
   animClass,
   frozen,
   size = 200,
+  awakeningTier = 0,
   onCorePointerDown,
   onCorePointerUp,
 }: OptisCreatureProps) {
@@ -44,6 +48,8 @@ export default function OptisCreature({
   const c1 = meta.accent; // ハイライト
   const c2 = meta.color; // ベース
   const particles = stage === 3 ? 4 : stage === 2 ? 2 : 0;
+  // 覚醒: Needs(自己投資)で蓄積。装備の発光と知性エフェクトを強化。
+  const awk = Math.max(0, Math.min(4, awakeningTier));
 
   return (
     <div
@@ -83,10 +89,32 @@ export default function OptisCreature({
           </filter>
         </defs>
 
-        {/* オーラ(発光) */}
+        {/* オーラ(発光) — 覚醒で強化 */}
         <g className="aura-g">
           <circle cx="100" cy="108" r="92" fill={`url(#aura-${uid})`} />
+          {awk > 0 && <circle cx="100" cy="108" r="96" fill={`url(#aura-${uid})`} opacity={0.18 * awk} />}
         </g>
+
+        {/* 覚醒リング(自己投資による知性エフェクト) */}
+        {awk >= 1 && (
+          <g className="spin-ccw" filter={`url(#glow-${uid})`} opacity={0.5 + awk * 0.1}>
+            <circle
+              cx="100" cy="108" r={70 + awk * 4}
+              fill="none" stroke={c1} strokeWidth={awk >= 3 ? 2.5 : 1.6}
+              strokeDasharray={`${2 + awk} ${16 - awk}`} strokeLinecap="round"
+            />
+          </g>
+        )}
+        {awk >= 3 && (
+          <g className="spin-fast" filter={`url(#glow-${uid})`} opacity="0.7">
+            {Array.from({ length: awk * 2 }).map((_, i) => {
+              const ang = (i / (awk * 2)) * Math.PI * 2;
+              return (
+                <circle key={i} cx={100 + Math.cos(ang) * 78} cy={108 + Math.sin(ang) * 78} r="2.4" fill={c1} />
+              );
+            })}
+          </g>
+        )}
 
         {/* 回転エネルギーリング(ステージで増加) */}
         {stage >= 2 && (
@@ -162,6 +190,15 @@ export default function OptisCreature({
               <circle cx="70" cy="150" r="4" fill={c1} opacity="0.6" />
               <circle cx="132" cy="146" r="3" fill={c1} opacity="0.5" />
               <path d="M100 168 q-3 10 0 16 q3 -6 0 -16" fill={c2} stroke={c1} strokeWidth="1.5" />
+            </g>
+          )}
+          {form === "PROFESSIONAL" && (
+            <g stroke="#ffffff" strokeWidth="1.4" opacity="0.6" fill="none">
+              {/* ダイヤカットのファセット */}
+              <path d="M100 58 L72 162 M100 58 L128 162 M62 78 L152 116 M138 78 L48 116" opacity="0.4" />
+              <polygon points="100,86 122,116 100,150 78,116" stroke="#ffffff" opacity="0.7" />
+              {/* 達人マーク(チェック) */}
+              <path d="M90 120 l8 9 l16 -20" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
             </g>
           )}
 

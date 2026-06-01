@@ -29,7 +29,19 @@ interface OptisData {
   form: OptisForm;
   needsRatio: number;
   wantsRatio: number;
+  awakening: number;
+  awakeningTier: number;
+  budget: { budget: number; spent: number; usageRatio: number; withinBudget: boolean; professional: boolean } | null;
   archive: { resistedTotal: number; items: { id: number; amount: number; date: string; memo: string | null }[] };
+}
+
+interface ActiveProject {
+  id: number;
+  name: string;
+  status: string;
+  progressPct: number;
+  remaining: number;
+  pendingBoostCount: number;
 }
 
 interface Balance { wallet: number; free: number; saved: number; }
@@ -39,6 +51,8 @@ export default function OptisLabPage() {
   const [optis, setOptis] = useState<OptisData | null>(null);
   const [balance, setBalance] = useState<Balance | null>(null);
   const [topGoal, setTopGoal] = useState<GoalSummary | null>(null);
+  const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
+  const [awakeBurst, setAwakeBurst] = useState(false);
   const [anim, setAnim] = useState<string>("optis-idle");
   const [bubble, setBubble] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -70,15 +84,18 @@ export default function OptisLabPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const [o, b, goals] = await Promise.all([
+    const [o, b, goals, projects] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
       fetch("/api/balance").then(r => r.json()),
       fetch("/api/goals").then(r => r.json()),
+      fetch("/api/projects").then(r => r.json()),
     ]);
     setOptis(o);
     setBalance(b);
     const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
     setTopGoal(active.length > 0 ? active[0] : null);
+    const ap = (projects as ActiveProject[]).find(p => p.status === "ACTIVE");
+    setActiveProject(ap ?? null);
     detectEvo(o as OptisData);
     return o as OptisData;
   }, [detectEvo]);
@@ -144,12 +161,16 @@ export default function OptisLabPage() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
   }
 
-  async function handleSaved(info: { expGain: number }) {
+  async function handleSaved(info: { expGain: number; awakened?: boolean }) {
     setShowAdd(false);
     if (info.expGain > 0) {
       setExpPop(info.expGain);
       playExpGain();
       setTimeout(() => setExpPop(null), 1100);
+    }
+    if (info.awakened) {
+      setAwakeBurst(true);
+      setTimeout(() => setAwakeBurst(false), 2400);
     }
     const fresh = await fetchAll();
     // 本日初回ならルーレット起動(進化カットイン中は閉じてから)
@@ -200,11 +221,23 @@ export default function OptisLabPage() {
 
   const meta = FORM_META[optis.form];
   const expPct = Math.round((optis.intoLevel / optis.needed) * 100);
+  const isProfessional = optis.form === "PROFESSIONAL";
 
   return (
     <div className="space-y-4 relative">
       {/* グリッチ遷移フラッシュ */}
       {glitch && <div className="fixed inset-0 z-[80] bg-cyan-400 glitch-flash pointer-events-none" />}
+
+      {/* 覚醒バースト通知 */}
+      {awakeBurst && (
+        <div className="fixed inset-0 z-[75] pointer-events-none flex items-center justify-center">
+          <div className="reward-pop text-center bg-black/70 rounded-2xl px-8 py-5">
+            <div className="text-4xl mb-1">📚✨</div>
+            <div className="text-white font-extrabold text-lg">覚醒ティアUP！</div>
+            <div className="text-yellow-300 text-sm mt-0.5">装備エフェクトが強化された！</div>
+          </div>
+        </div>
+      )}
 
       {/* ステータスバー */}
       <div className="grid grid-cols-3 gap-2">
@@ -232,6 +265,36 @@ export default function OptisLabPage() {
           <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full rounded-full" style={{ width: `${topGoal.progress}%`, background: "linear-gradient(90deg,#3b82f6,#6366f1)" }} />
           </div>
+        </Link>
+      )}
+
+      {/* プロフェッショナル形態バッジ */}
+      {isProfessional && (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-2.5">
+          <span className="text-xl">💼</span>
+          <div>
+            <div className="text-xs font-bold text-emerald-700">プロフェッショナル形態 解放中！</div>
+            <div className="text-[11px] text-emerald-500">先週の予算を90%以上使い切り、1円もオーバーしなかった！</div>
+          </div>
+        </div>
+      )}
+
+      {/* 進行中プロジェクトバナー */}
+      {activeProject && (
+        <Link href="/projects" className="block bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-base">🎯</span>
+            <span className="text-xs font-bold text-gray-700 truncate">{activeProject.name}</span>
+            <span className="ml-auto text-xs font-extrabold text-emerald-600">{activeProject.progressPct}%</span>
+          </div>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${activeProject.progressPct}%` }} />
+          </div>
+          {(activeProject as ActiveProject & { pendingBoostCount?: number }).pendingBoostCount ? (
+            <div className="text-[11px] text-blue-600 font-medium mt-1">⚡ 親ブーストを申請できます！</div>
+          ) : (
+            <div className="text-[11px] text-gray-400 mt-1">あと {formatJPY(activeProject.remaining)}</div>
+          )}
         </Link>
       )}
 
@@ -268,6 +331,7 @@ export default function OptisLabPage() {
             animClass={anim}
             frozen={optis.frozen}
             size={220}
+            awakeningTier={optis.awakeningTier ?? 0}
             onCorePointerDown={coreDown}
             onCorePointerUp={coreUp}
           />

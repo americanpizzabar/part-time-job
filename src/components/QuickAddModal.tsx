@@ -6,7 +6,7 @@ import { EXPENSE_CATEGORIES } from "@/lib/budget";
 
 interface QuickAddModalProps {
   onClose: () => void;
-  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS" }) => void;
+  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean }) => void;
 }
 
 type Step = "amount" | "sort" | "done";
@@ -74,7 +74,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
       const data = await res.json().catch(() => ({ expGain: 0 }));
       // 吸収アニメーションを見せてから閉じる
       setTimeout(() => {
-        onSaved({ expGain: data.expGain ?? 0, tag });
+        onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false });
       }, 700);
     } finally {
       setSaving(false);

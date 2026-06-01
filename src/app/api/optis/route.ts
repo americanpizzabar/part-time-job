@@ -25,7 +25,7 @@ export async function GET() {
     }
   }
 
-  const derived = await computeDerived(state.experience);
+  const derived = await computeDerived(state.experience, state.awakening);
   const unlocked = parseUnlocked(state.unlockedParts);
   const frozen = !!(state.freezeUntil && state.freezeUntil > new Date());
 

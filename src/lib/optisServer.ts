@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import { toDateStr } from "@/lib/dateUtils";
-import { subDays } from "date-fns";
+import { toDateStr, today } from "@/lib/dateUtils";
+import { subDays, startOfWeek, endOfWeek } from "date-fns";
 import {
   levelFromExp,
   evolutionStage,
-  formFromNeedsRatio,
+  formFromState,
   isInAfterschoolWindow,
+  awakeningTier,
+  BudgetResult,
 } from "@/lib/optis";
 
 // シングルトンのOptisStateを取得(なければ作成)
@@ -24,8 +26,34 @@ export function parseUnlocked(json: string): string[] {
   }
 }
 
-// 過去14日のNeeds/Wants比率から形態を算出
-export async function computeDerived(experience: number) {
+// 週予算の達成状況を評価(直近の「完了した週」= 先週 を対象)
+export async function evaluateWeeklyBudget(): Promise<BudgetResult | null> {
+  const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
+  const budget = cfg?.weeklyBudget ?? null;
+  if (!budget || budget <= 0) return null;
+
+  // 直近の完了週(先週月曜〜日曜)
+  const lastWeekRef = subDays(new Date(), 7);
+  const ws = toDateStr(startOfWeek(lastWeekRef, { weekStartsOn: 1 }));
+  const we = toDateStr(endOfWeek(lastWeekRef, { weekStartsOn: 1 }));
+
+  const txs = await prisma.transaction.findMany({
+    where: { type: "EXPENSE", date: { gte: ws, lte: we } },
+  });
+  const spent = txs.reduce((s, t) => s + t.amount, 0);
+  const usageRatio = Math.round((spent / budget) * 100);
+  const withinBudget = spent <= budget;
+  return {
+    budget,
+    spent,
+    usageRatio,
+    withinBudget,
+    professional: withinBudget && usageRatio >= 90,
+  };
+}
+
+// 経験値・形態・覚醒などの派生情報を算出
+export async function computeDerived(experience: number, awakening: number) {
   const since = toDateStr(subDays(new Date(), 13));
   const txs = await prisma.transaction.findMany({
     where: { type: "EXPENSE", date: { gte: since } },
@@ -39,15 +67,40 @@ export async function computeDerived(experience: number) {
   const total = needs + wants;
   const needsRatio = total > 0 ? Math.round((needs / total) * 100) : 50;
   const lv = levelFromExp(experience);
+  const budget = await evaluateWeeklyBudget();
   return {
     ...lv,
     stage: evolutionStage(lv.level),
-    form: formFromNeedsRatio(needsRatio),
+    form: formFromState(needsRatio, budget),
     needsRatio,
     wantsRatio: 100 - needsRatio,
     needs14: needs,
     wants14: wants,
+    budget,
+    awakening,
+    awakeningTier: awakeningTier(awakening),
   };
+}
+
+// ルーレット確変条件:
+// 「支出0円」ではなく、当日にNeeds(自己投資)を記録した or
+// 当日の支出が計画(日割り予算)の範囲内だった場合に確変。
+export async function isRouletteBoostEligible(dateStr: string = today()): Promise<boolean> {
+  const txs = await prisma.transaction.findMany({
+    where: { type: "EXPENSE", date: dateStr },
+  });
+  // Needs記録があれば確変
+  if (txs.some(t => t.needsWants === "NEEDS")) return true;
+
+  // 当日支出が日割り予算内(かつ0より大)なら「計画通り」とみなす
+  const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
+  const weekly = cfg?.weeklyBudget ?? 0;
+  if (weekly > 0) {
+    const daily = weekly / 7;
+    const spent = txs.reduce((s, t) => s + t.amount, 0);
+    if (spent > 0 && spent <= daily) return true;
+  }
+  return false;
 }
 
 // 後出し不正検知: NMD申告日に放課後ウィンドウの支出が後から追加されていないか

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
-import { EXP_PER_RECORD, EXP_NEEDS_BONUS } from "@/lib/optis";
+import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
 
@@ -50,18 +50,29 @@ export async function POST(req: Request) {
   });
 
   // Optisに経験値を付与(凍結中を除く)。0円申告(amount=0)でも記録経験は付与
+  // Needs(自己投資)購入は「良質なエネルギー」として覚醒値も上昇させ、装備を強化する。
   let expGain = 0;
+  let awakened = false;
+  let awakeningTierAfter = 0;
   if (type === "EXPENSE") {
     const state = await getOptisState();
     const frozen = state.freezeUntil && state.freezeUntil > new Date();
     if (!frozen) {
-      expGain = EXP_PER_RECORD + (needsWants === "NEEDS" ? EXP_NEEDS_BONUS : 0);
+      const isNeeds = needsWants === "NEEDS";
+      expGain = EXP_PER_RECORD + (isNeeds ? EXP_NEEDS_BONUS : 0);
+      const prevTier = awakeningTier(state.awakening);
+      const newAwakening = state.awakening + (isNeeds ? AWAKENING_PER_NEEDS : 0);
+      awakeningTierAfter = awakeningTier(newAwakening);
+      awakened = isNeeds && awakeningTierAfter > prevTier;
       await prisma.optisState.update({
         where: { id: state.id },
-        data: { experience: state.experience + expGain },
+        data: { experience: state.experience + expGain, awakening: newAwakening },
       });
     }
   }
 
-  return NextResponse.json({ ...transaction, expGain }, { status: 201 });
+  return NextResponse.json(
+    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter },
+    { status: 201 }
+  );
 }
