@@ -364,3 +364,61 @@ export function projectProgress(p: {
     completed: total >= p.targetAmount,
   };
 }
+
+// ─── ダイナミック・マーケット ─────────────────────────────────────────
+// レアリティ別の基準価格(Gコイン)
+export const MARKET_BASE_PRICES: Record<Rarity, number> = {
+  COMMON: 50,
+  UNCOMMON: 120,
+  RARE: 300,
+  LEGENDARY: 800,
+};
+
+export const MARKET_SELL_FEE = 0.15; // 売却手数料15%
+
+// 需給バランスに基づいた価格計算: 基準価格の30%〜300%で変動
+export function computeMarketPrice(basePrice: number, totalBought: number, totalSold: number): number {
+  const net = totalBought - totalSold;
+  const vol = Math.max(1, totalBought + totalSold);
+  const multiplier = Math.max(0.3, Math.min(3.0, 1 + 0.06 * (net / vol)));
+  return Math.round((basePrice * multiplier) / 5) * 5; // 5G単位で丸め
+}
+
+export function marketSellPrice(currentPrice: number): number {
+  return Math.floor(currentPrice * (1 - MARKET_SELL_FEE) / 5) * 5;
+}
+
+// ─── 世代引き継ぎボーナス(転生システム) ─────────────────────────────
+export interface GenerationBonus {
+  expMultiplier: number;   // 1.0 + (gen-1) * 0.1
+  darkWebHour: number;     // dark web解放時刻(デフォルト21; gen3+で20, gen5+で19)
+  advancedAdvice: boolean; // gen2+でOptisのアドバイスが高度になる
+}
+
+export function generationBonus(gen: number): GenerationBonus {
+  return {
+    expMultiplier: 1 + (gen - 1) * 0.10,
+    darkWebHour: gen >= 5 ? 19 : gen >= 3 ? 20 : 21,
+    advancedAdvice: gen >= 2,
+  };
+}
+
+export const CRYSTALLIZE_MIN_LEVEL = 15; // 転生に必要な最小レベル
+export const CRYSTALLIZE_MIN_STAGE = 3;  // 転生には最終形態到達が必須
+
+// ─── ファミリー・クレジット ──────────────────────────────────────────
+export const LOAN_COMPLETE_CREDIT_BOOST = 20;
+export const LOAN_DEFAULT_INTEREST_RATE = 0.05; // 月5%
+
+// 月額返済額計算: 元金均等 + 固定利息
+export function calcMonthlyPayment(principal: number, months: number, interestPerMonth: number): number {
+  return Math.ceil(principal / months) + interestPerMonth;
+}
+
+// ─── シャドウ・フィード デフォルト種別色 ───────────────────────────
+export const FEED_CATEGORY_META: Record<string, { color: string; label: string; icon: string }> = {
+  NEWS:  { color: "#22d3ee", label: "ニュース",   icon: "📡" },
+  ALERT: { color: "#ef4444", label: "アラート",   icon: "⚠️" },
+  BOOST: { color: "#f59e0b", label: "ブースト",   icon: "⚡" },
+  TREND: { color: "#a855f7", label: "トレンド",   icon: "📈" },
+};

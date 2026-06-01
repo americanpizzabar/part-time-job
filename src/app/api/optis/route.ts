@@ -25,7 +25,7 @@ export async function GET() {
     }
   }
 
-  const derived = await computeDerived(state.experience, state.awakening);
+  const derived = await computeDerived(state.experience, state.awakening, state.generation);
   const unlocked = parseUnlocked(state.unlockedParts);
   const frozen = !!(state.freezeUntil && state.freezeUntil > new Date());
 
@@ -34,6 +34,12 @@ export async function GET() {
   const resistedTotal = savings.reduce((s, t) => s + (t.amount > 0 ? t.amount : 0), 0);
 
   const todayStr = today();
+
+  const activeLoan = await prisma.familyLoan.findFirst({
+    where: { status: "ACTIVE" },
+    orderBy: { approvedAt: "desc" },
+  });
+  const crystalCount = await prisma.memoryCube.count();
 
   return NextResponse.json({
     id: state.id,
@@ -55,6 +61,16 @@ export async function GET() {
       resistedTotal,
       items: savings.filter(s => s.amount > 0).slice(0, 20),
     },
+    activeLoan: activeLoan ? {
+      id: activeLoan.id,
+      purpose: activeLoan.purpose,
+      principal: activeLoan.principal,
+      monthlyPayment: activeLoan.monthlyPayment,
+      months: activeLoan.months,
+      paidMonths: activeLoan.paidMonths,
+      remaining: activeLoan.months - activeLoan.paidMonths,
+    } : null,
+    crystalCount,
   });
 }
 

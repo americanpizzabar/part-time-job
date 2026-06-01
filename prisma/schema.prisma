@@ -152,6 +152,7 @@ model OptisState {
   freezeUntil      DateTime? // 凍結解除時刻(不正検知ペナルティ)
   awakening        Int       @default(0) // Needs(自己投資)購入で蓄積する覚醒値
   gcoins           Int       @default(0) // ゲーム内仮想コイン(バンク/ショップ用)
+  generation       Int       @default(1) // 転生(結晶化)回数 + 1
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -268,6 +269,58 @@ model OutcomeReport {
   parentNote String?
   createdAt  DateTime @default(now())
   approvedAt DateTime?
+}
+
+// ─── ダイナミック・マーケット(パーツ価格変動) ─────────────────────────
+model PartMarketPrice {
+  id           Int      @id @default(autoincrement())
+  partId       String   @unique
+  currentPrice Int
+  totalBought  Int      @default(0)
+  totalSold    Int      @default(0)
+  updatedAt    DateTime @updatedAt
+  history      Json     @default("[]") // [{date,price}]
+}
+
+// ─── メモリーキューブ(転生記録) ────────────────────────────────────────
+model MemoryCube {
+  id             Int      @id @default(autoincrement())
+  generation     Int
+  form           String
+  stage          Int
+  level          Int
+  awakening      Int
+  creditScore    Int
+  crystallizedAt DateTime @default(now())
+  nickname       String?
+}
+
+// ─── ファミリー・クレジット(家族間ローン) ────────────────────────────
+model FamilyLoan {
+  id               Int      @id @default(autoincrement())
+  purpose          String
+  principal        Int
+  months           Int
+  monthlyPayment   Int
+  interestPerMonth Int      @default(0)
+  paidMonths       Int      @default(0)
+  status           String   @default("PENDING") // PENDING | ACTIVE | COMPLETED | REJECTED
+  parentNote       String?
+  createdAt        DateTime @default(now())
+  approvedAt       DateTime?
+  completedAt      DateTime?
+}
+
+// ─── シャドウ・フィード(世界ハック情報) ──────────────────────────────
+model FeedItem {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  category    String   @default("NEWS") // NEWS | ALERT | BOOST | TREND
+  effectJson  String?  // JSON: {"type":"exp_multiplier","category":"書籍","multiplier":2,"expiresAt":"YYYY-MM-DD"}
+  isActive    Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  expiresAt   DateTime?
 }
 
 // ─── タイムワープ・バンク(仮想銀行) ──────────────────────────────────

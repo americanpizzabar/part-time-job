@@ -54,12 +54,38 @@ export async function POST(req: Request) {
   let expGain = 0;
   let awakened = false;
   let awakeningTierAfter = 0;
+  let feedBoostApplied = false;
   if (type === "EXPENSE") {
     const state = await getOptisState();
     const frozen = state.freezeUntil && state.freezeUntil > new Date();
     if (!frozen) {
       const isNeeds = needsWants === "NEEDS";
-      expGain = EXP_PER_RECORD + (isNeeds ? EXP_NEEDS_BONUS : 0);
+      let baseExp = EXP_PER_RECORD + (isNeeds ? EXP_NEEDS_BONUS : 0);
+
+      // シャドウ・フィードのブースト効果を確認(Needs記録のみ対象)
+      if (isNeeds && category) {
+        const now = new Date();
+        const boostItems = await prisma.feedItem.findMany({
+          where: {
+            isActive: true,
+            category: "BOOST",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+        });
+        for (const item of boostItems) {
+          if (!item.effectJson) continue;
+          try {
+            const effect = JSON.parse(item.effectJson) as { type: string; category: string; multiplier: number };
+            if (effect.type === "exp_multiplier" && category.includes(effect.category)) {
+              baseExp = Math.round(baseExp * effect.multiplier);
+              feedBoostApplied = true;
+              break;
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
+
+      expGain = baseExp;
       const prevTier = awakeningTier(state.awakening);
       const newAwakening = state.awakening + (isNeeds ? AWAKENING_PER_NEEDS : 0);
       awakeningTierAfter = awakeningTier(newAwakening);
@@ -72,7 +98,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(
-    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter },
+    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter, feedBoostApplied },
     { status: 201 }
   );
 }

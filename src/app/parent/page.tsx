@@ -60,6 +60,19 @@ interface LunchRecord {
   imageUrl: string | null;
 }
 
+interface FamilyLoan {
+  id: number;
+  purpose: string;
+  principal: number;
+  months: number;
+  monthlyPayment: number;
+  interestPerMonth: number;
+  paidMonths: number;
+  status: string;
+  parentNote: string | null;
+  createdAt: string;
+}
+
 interface OutcomeReport {
   id: number;
   projectId: number;
@@ -78,6 +91,14 @@ export default function ParentPage() {
   const [lunches, setLunches] = useState<LunchRecord[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [outcomeReports, setOutcomeReports] = useState<OutcomeReport[]>([]);
+  const [loans, setLoans] = useState<FamilyLoan[]>([]);
+  const [loanMsg, setLoanMsg] = useState<Record<number, string>>({});
+  const [loanInterest, setLoanInterest] = useState<Record<number, string>>({});
+  const [feedTitle, setFeedTitle] = useState("");
+  const [feedBody, setFeedBody] = useState("");
+  const [feedCategory, setFeedCategory] = useState("NEWS");
+  const [feedBoostCat, setFeedBoostCat] = useState("");
+  const [feedPosting, setFeedPosting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<Presentation | null>(null);
   const [message, setMessage] = useState("");
@@ -90,18 +111,20 @@ export default function ParentPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [b, p, l, pr, outs] = await Promise.all([
+      const [b, p, l, pr, outs, ls] = await Promise.all([
         fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
         fetch("/api/presentations").then(r => r.json()),
         fetch(`/api/transactions?category=昼食&startDate=${start}&endDate=${end}`).then(r => r.json()),
         fetch("/api/projects").then(r => r.json()),
         fetch("/api/outcome").then(r => r.json()),
+        fetch("/api/loan").then(r => r.json()),
       ]);
       setBalance(b);
       setPresentations(p);
       setLunches((l as LunchRecord[]).filter((t: LunchRecord) => t.imageUrl));
       setProjects(pr);
       setOutcomeReports((outs as OutcomeReport[]).filter(o => o.status === "PENDING"));
+      setLoans((ls as FamilyLoan[]).filter(loan => loan.status === "PENDING" || loan.status === "ACTIVE"));
     } finally {
       setLoading(false);
     }
@@ -128,6 +151,31 @@ export default function ParentPage() {
     });
     setProjectMsg(m => ({ ...m, [projectId]: "" }));
     fetchData();
+  }
+
+  async function respondLoan(id: number, action: "APPROVE" | "REJECT" | "REPAY") {
+    const ipm = Number(loanInterest[id] ?? 0);
+    await fetch(`/api/loan/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, interestPerMonth: ipm, parentNote: loanMsg[id] ?? undefined }),
+    });
+    fetchData();
+  }
+
+  async function postFeed() {
+    if (!feedTitle.trim() || !feedBody.trim()) return;
+    setFeedPosting(true);
+    const effectJson = feedCategory === "BOOST" && feedBoostCat
+      ? JSON.stringify({ type: "exp_multiplier", category: feedBoostCat, multiplier: 2 })
+      : undefined;
+    await fetch("/api/feed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: feedTitle, body: feedBody, category: feedCategory, effectJson }),
+    });
+    setFeedTitle(""); setFeedBody(""); setFeedBoostCat("");
+    setFeedPosting(false);
   }
 
   async function respondOutcome(id: number, action: "APPROVE" | "REJECT") {
@@ -373,6 +421,141 @@ export default function ParentPage() {
               </div>
             </div>
           )}
+
+          {/* ファミリー・クレジット ローン審査 */}
+          {loans.length > 0 && (
+            <div>
+              <h2 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                💳 ファミリー・ローン
+                {loans.filter(l => l.status === "PENDING").length > 0 && (
+                  <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+                    {loans.filter(l => l.status === "PENDING").length} 審査待ち
+                  </span>
+                )}
+              </h2>
+              <div className="space-y-3">
+                {loans.map(loan => (
+                  <div key={loan.id} className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-bold text-gray-800">{loan.purpose}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          融資額 {loan.principal.toLocaleString()}円 / {loan.months}ヶ月
+                        </div>
+                      </div>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${loan.status === "PENDING" ? "bg-yellow-100 text-yellow-700" : "bg-blue-100 text-blue-700"}`}>
+                        {loan.status === "PENDING" ? "審査中" : `返済中 ${loan.paidMonths}/${loan.months}`}
+                      </span>
+                    </div>
+
+                    {loan.status === "PENDING" && (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">月利(円/月)</label>
+                            <input
+                              type="number"
+                              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mt-0.5 focus:outline-none focus:border-blue-400"
+                              placeholder="例: 100 (デフォルト0)"
+                              value={loanInterest[loan.id] ?? ""}
+                              onChange={e => setLoanInterest(m => ({ ...m, [loan.id]: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">月返済額(自動計算)</label>
+                            <div className="border border-gray-200 rounded-xl px-3 py-2 text-sm mt-0.5 bg-gray-50 text-gray-600">
+                              {(Math.ceil(loan.principal / loan.months) + Number(loanInterest[loan.id] ?? 0)).toLocaleString()}円
+                            </div>
+                          </div>
+                        </div>
+                        <input
+                          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                          placeholder="コメント(任意)"
+                          value={loanMsg[loan.id] ?? ""}
+                          onChange={e => setLoanMsg(m => ({ ...m, [loan.id]: e.target.value }))}
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={() => respondLoan(loan.id, "APPROVE")} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-bold">承認 ✓</button>
+                          <button onClick={() => respondLoan(loan.id, "REJECT")} className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold">却下</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {loan.status === "ACTIVE" && (
+                      <div>
+                        <div className="h-2 bg-gray-100 rounded-full mb-2">
+                          <div className="h-full rounded-full bg-blue-500" style={{ width: `${(loan.paidMonths / loan.months) * 100}%` }} />
+                        </div>
+                        <div className="text-xs text-gray-500 text-center mb-2">
+                          残り{loan.months - loan.paidMonths}回 × {loan.monthlyPayment.toLocaleString()}円/月
+                        </div>
+                        <button onClick={() => respondLoan(loan.id, "REPAY")} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-bold">
+                          今月分の返済を記録 ({loan.monthlyPayment.toLocaleString()}円)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* シャドウ・フィード 投稿 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">📡 世界ハック・フィードを投稿</h2>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+              <div>
+                <label className="text-xs text-gray-500">カテゴリ</label>
+                <select
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  value={feedCategory}
+                  onChange={e => setFeedCategory(e.target.value)}
+                >
+                  <option value="NEWS">📡 ニュース</option>
+                  <option value="ALERT">⚠️ アラート</option>
+                  <option value="BOOST">⚡ ブースト(EXP増加)</option>
+                  <option value="TREND">📈 トレンド</option>
+                </select>
+              </div>
+              {feedCategory === "BOOST" && (
+                <div>
+                  <label className="text-xs text-gray-500">ブースト対象カテゴリ(例: 書籍・スポーツ)</label>
+                  <input
+                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                    placeholder="書籍"
+                    value={feedBoostCat}
+                    onChange={e => setFeedBoostCat(e.target.value)}
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-gray-500">タイトル</label>
+                <input
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  placeholder="例: 【速報】今月は家族で節約チャレンジ！"
+                  value={feedTitle}
+                  onChange={e => setFeedTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">本文</label>
+                <textarea
+                  rows={3}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+                  placeholder="子どもへのメッセージやゲーム内効果を書いてみよう"
+                  value={feedBody}
+                  onChange={e => setFeedBody(e.target.value)}
+                />
+              </div>
+              <button
+                onClick={postFeed}
+                disabled={feedPosting || !feedTitle.trim() || !feedBody.trim()}
+                className="w-full bg-purple-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
+              >
+                {feedPosting ? "送信中…" : "フィードに投稿する"}
+              </button>
+            </div>
+          </div>
 
           {/* シークレット・ミッション */}
           <MissionManager />

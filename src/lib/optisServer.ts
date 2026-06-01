@@ -7,6 +7,7 @@ import {
   formFromState,
   isInAfterschoolWindow,
   awakeningTier,
+  generationBonus,
   BudgetResult,
 } from "@/lib/optis";
 
@@ -53,7 +54,7 @@ export async function evaluateWeeklyBudget(): Promise<BudgetResult | null> {
 }
 
 // 経験値・形態・覚醒などの派生情報を算出
-export async function computeDerived(experience: number, awakening: number) {
+export async function computeDerived(experience: number, awakening: number, generation: number = 1) {
   const since = toDateStr(subDays(new Date(), 13));
   const txs = await prisma.transaction.findMany({
     where: { type: "EXPENSE", date: { gte: since } },
@@ -66,7 +67,10 @@ export async function computeDerived(experience: number, awakening: number) {
   }
   const total = needs + wants;
   const needsRatio = total > 0 ? Math.round((needs / total) * 100) : 50;
-  const lv = levelFromExp(experience);
+  const genBonus = generationBonus(generation);
+  // 世代ボーナスで経験値を補正した上でレベル計算
+  const effectiveExp = Math.round(experience * genBonus.expMultiplier);
+  const lv = levelFromExp(effectiveExp);
   const budget = await evaluateWeeklyBudget();
   return {
     ...lv,
@@ -79,6 +83,8 @@ export async function computeDerived(experience: number, awakening: number) {
     budget,
     awakening,
     awakeningTier: awakeningTier(awakening),
+    generation,
+    generationBonus: genBonus,
   };
 }
 

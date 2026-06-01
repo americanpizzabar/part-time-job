@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { formatJPY } from "@/lib/dateUtils";
-import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour } from "@/lib/optis";
+import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour, generationBonus, CRYSTALLIZE_MIN_LEVEL, CRYSTALLIZE_MIN_STAGE } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
 import OptisCreature from "@/components/OptisCreature";
 import QuickAddModal from "@/components/QuickAddModal";
@@ -33,6 +33,9 @@ interface OptisData {
   awakeningTier: number;
   budget: { budget: number; spent: number; usageRatio: number; withinBudget: boolean; professional: boolean } | null;
   archive: { resistedTotal: number; items: { id: number; amount: number; date: string; memo: string | null }[] };
+  activeLoan: { id: number; purpose: string; principal: number; monthlyPayment: number; months: number; paidMonths: number; remaining: number } | null;
+  crystalCount: number;
+  generation: number;
 }
 
 interface ActiveProject {
@@ -53,6 +56,11 @@ export default function OptisLabPage() {
   const [topGoal, setTopGoal] = useState<GoalSummary | null>(null);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
   const [brainType, setBrainType] = useState<BrainType>("BALANCED");
+  const [crystalizing, setCrystalizing] = useState(false);
+  const [crystalMsg, setCrystalMsg] = useState<string | null>(null);
+  const [showLoanForm, setShowLoanForm] = useState(false);
+  const [loanForm, setLoanForm] = useState({ purpose: "", principal: "", months: "3" });
+  const [loanSaving, setLoanSaving] = useState(false);
   const [awakeBurst, setAwakeBurst] = useState(false);
   const [anim, setAnim] = useState<string>("optis-idle");
   const [bubble, setBubble] = useState<string | null>(null);
@@ -195,6 +203,40 @@ export default function OptisLabPage() {
     }
   }
 
+  async function crystallize() {
+    setCrystalizing(true);
+    const r = await fetch("/api/optis/crystallize", { method: "POST" });
+    const data = await r.json();
+    if (r.ok) {
+      setCrystalMsg(`✨ メモリーキューブ生成！Gen.${data.newGeneration - 1} の記憶が結晶化されました`);
+      localStorage.removeItem("optis-evo");
+      fetchAll();
+    } else {
+      setCrystalMsg(`❌ ${data.error}`);
+    }
+    setCrystalizing(false);
+    setTimeout(() => setCrystalMsg(null), 3500);
+  }
+
+  async function requestLoan() {
+    if (!loanForm.purpose.trim() || !loanForm.principal) return;
+    setLoanSaving(true);
+    const r = await fetch("/api/loan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purpose: loanForm.purpose, principal: Number(loanForm.principal), months: Number(loanForm.months) }),
+    });
+    if (r.ok) {
+      setShowLoanForm(false);
+      setLoanForm({ purpose: "", principal: "", months: "3" });
+      fetchAll();
+    } else {
+      const d = await r.json();
+      alert(d.error);
+    }
+    setLoanSaving(false);
+  }
+
   async function answerNmd(noSpending: boolean) {
     setNmdAsk(false);
     localStorage.setItem(`nmd-asked-${new Date().toISOString().slice(0, 10)}`, "1");
@@ -282,6 +324,36 @@ export default function OptisLabPage() {
         </div>
       )}
 
+      {/* 世代バッジ */}
+      {optis.generation > 1 && (
+        <div className="flex items-center gap-2 bg-fuchsia-50 border border-fuchsia-300 rounded-xl px-4 py-2.5">
+          <span className="text-xl">✨</span>
+          <div>
+            <div className="text-xs font-bold text-fuchsia-700">Gen.{optis.generation} — 転生済み</div>
+            <div className="text-[11px] text-fuchsia-500">EXP×{generationBonus(optis.generation).expMultiplier.toFixed(1)} / ダークウェブ解放: {generationBonus(optis.generation).darkWebHour}:00〜</div>
+          </div>
+        </div>
+      )}
+
+      {/* ローン返済バナー */}
+      {optis.activeLoan && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-xl px-4 py-2.5">
+          <span className="text-xl">💳</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-red-700">ローン返済中: {optis.activeLoan.purpose}</div>
+            <div className="text-[11px] text-red-500">残り{optis.activeLoan.remaining}回 × {optis.activeLoan.monthlyPayment.toLocaleString()}円/月</div>
+          </div>
+          <div className="text-xs font-extrabold text-red-600">{optis.activeLoan.paidMonths}/{optis.activeLoan.months}ヶ月</div>
+        </div>
+      )}
+
+      {/* 結晶化メッセージ */}
+      {crystalMsg && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-fuchsia-900 text-fuchsia-100 text-sm px-4 py-2.5 rounded-full shadow-lg font-medium text-center max-w-xs">
+          {crystalMsg}
+        </div>
+      )}
+
       {/* 進行中プロジェクトバナー */}
       {activeProject && (
         <Link href="/projects" className="block bg-white border border-gray-200 rounded-xl px-4 py-3">
@@ -356,6 +428,32 @@ export default function OptisLabPage() {
           </div>
         </div>
 
+        {/* メモリーキューブ棚 */}
+        {optis.crystalCount > 0 && (
+          <div className="w-full mt-3">
+            <div className="text-[10px] text-center mb-1.5" style={{ color: meta.accent }}>— メモリーキューブ —</div>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {Array.from({ length: optis.crystalCount }).map((_, i) => (
+                <div key={i} className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold border" style={{ background: `${meta.color}30`, borderColor: `${meta.color}60`, color: meta.accent }}>
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 転生ボタン */}
+        {optis.stage >= CRYSTALLIZE_MIN_STAGE && optis.level >= CRYSTALLIZE_MIN_LEVEL && !optis.frozen && (
+          <button
+            onClick={crystallize}
+            disabled={crystalizing}
+            className="mt-3 px-5 py-2 rounded-full text-xs font-bold border animate-pulse disabled:opacity-40"
+            style={{ background: `${meta.color}20`, borderColor: meta.color, color: meta.accent }}
+          >
+            {crystalizing ? "結晶化中…" : "✨ 転生する（メモリーキューブ化）"}
+          </button>
+        )}
+
         {optis.frozen && (
           <div className="mt-3 text-xs text-red-300 bg-red-500/20 px-3 py-1.5 rounded-lg text-center">
             ⚠️ 不正検知によりステータス凍結中。反応・経験値が停止しています。
@@ -395,6 +493,18 @@ export default function OptisLabPage() {
             <div className="text-[11px] text-gray-500">集める・装備</div>
           </div>
         </Link>
+        {!optis.activeLoan && (
+          <button
+            onClick={() => setShowLoanForm(true)}
+            className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 hover:border-red-300 text-left"
+          >
+            <span className="text-2xl">💳</span>
+            <div className="min-w-0">
+              <div className="font-medium text-gray-800 text-sm">ローン申請</div>
+              <div className="text-[11px] text-gray-500">前借り・返済計画</div>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* 浮遊入力ボタン */}
@@ -411,6 +521,66 @@ export default function OptisLabPage() {
 
       {showAdd && <QuickAddModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
       {showRoulette && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}
+
+      {/* ローン申請モーダル */}
+      {showLoanForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-sm sm:rounded-2xl rounded-t-2xl shadow-xl p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">💳</span>
+              <h2 className="text-lg font-bold text-gray-800">ローン申請</h2>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">
+              借りたお金は毎月のお小遣いから返済します。返済が終わると信用スコアが大幅UPします。
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">何に使うか</label>
+              <input
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400"
+                placeholder="例: 塾用のバッグ、部活の道具"
+                value={loanForm.purpose}
+                onChange={e => setLoanForm({ ...loanForm, purpose: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">借りたい金額(円)</label>
+              <input
+                type="number"
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-red-400"
+                placeholder="5000"
+                value={loanForm.principal}
+                onChange={e => setLoanForm({ ...loanForm, principal: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">返済期間</label>
+              <select
+                className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                value={loanForm.months}
+                onChange={e => setLoanForm({ ...loanForm, months: e.target.value })}
+              >
+                {[1, 2, 3, 4, 5, 6].map(m => (
+                  <option key={m} value={m}>{m}ヶ月
+                    {loanForm.principal ? ` (月 ${Math.ceil(Number(loanForm.principal) / m).toLocaleString()}円〜)` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowLoanForm(false)} className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-2.5 font-semibold">
+                キャンセル
+              </button>
+              <button
+                onClick={requestLoan}
+                disabled={loanSaving || !loanForm.purpose.trim() || !loanForm.principal}
+                className="flex-1 bg-red-500 text-white rounded-xl py-2.5 font-semibold disabled:opacity-40"
+              >
+                {loanSaving ? "申請中…" : "申請する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 進化・変身カットイン */}
       {evolution && (
