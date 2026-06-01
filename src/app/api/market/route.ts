@@ -80,6 +80,22 @@ export async function POST(req: Request) {
   const priceRow = await getOrInitPrice(partId);
   if (!priceRow) return NextResponse.json({ error: "価格データ取得失敗" }, { status: 500 });
 
+  // Apply the same weather multiplier as GET so displayed price = charged price
+  const activeWeather = await prisma.economicWeather.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const shieldAttempt = await prisma.quizAttempt.findFirst({
+    where: { correct: true, shieldUntil: { gt: new Date() } },
+    orderBy: { shieldUntil: "desc" },
+  });
+  let weatherMultiplier = 1.0;
+  if (activeWeather && !shieldAttempt) {
+    const meta = WEATHER_META[activeWeather.type as WeatherType];
+    if (meta) weatherMultiplier = meta.marketMultiplier;
+  }
+  const effectivePrice = Math.round((priceRow.currentPrice * weatherMultiplier) / 5) * 5;
+
   const base = MARKET_BASE_PRICES[part.rarity];
   const todayStr = today();
 
@@ -87,8 +103,8 @@ export async function POST(req: Request) {
     if (unlocked.includes(partId)) {
       return NextResponse.json({ error: "すでに所持しています" }, { status: 400 });
     }
-    if (state.gcoins < priceRow.currentPrice) {
-      return NextResponse.json({ error: `Gコインが不足しています (必要: ${priceRow.currentPrice}G)` }, { status: 400 });
+    if (state.gcoins < effectivePrice) {
+      return NextResponse.json({ error: `Gコインが不足しています (必要: ${effectivePrice}G)` }, { status: 400 });
     }
 
     const newTotalBought = priceRow.totalBought + 1;
@@ -100,7 +116,7 @@ export async function POST(req: Request) {
       prisma.optisState.update({
         where: { id: state.id },
         data: {
-          gcoins: state.gcoins - priceRow.currentPrice,
+          gcoins: state.gcoins - effectivePrice,
           unlockedParts: JSON.stringify([...unlocked, partId]),
         },
       }),
@@ -110,7 +126,7 @@ export async function POST(req: Request) {
       }),
     ]);
 
-    return NextResponse.json({ ok: true, paid: priceRow.currentPrice, newPrice });
+    return NextResponse.json({ ok: true, paid: effectivePrice, newPrice });
   }
 
   if (action === "SELL") {
@@ -122,7 +138,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "装備中のパーツは売却できません" }, { status: 400 });
     }
 
-    const sellPrice = marketSellPrice(priceRow.currentPrice);
+    const sellPrice = marketSellPrice(effectivePrice);
     const newTotalSold = priceRow.totalSold + 1;
     const newPrice = computeMarketPrice(base, priceRow.totalBought, newTotalSold);
     const history = (priceRow.history as { date: string; price: number }[]).slice(-29);

@@ -77,7 +77,7 @@ export async function POST(req: Request) {
           if (!item.effectJson) continue;
           try {
             const effect = JSON.parse(item.effectJson) as { type: string; category: string; multiplier: number };
-            if (effect.type === "exp_multiplier" && category.includes(effect.category)) {
+            if (effect.type === "exp_multiplier" && category === effect.category) {
               baseExp = Math.round(baseExp * effect.multiplier);
               feedBoostApplied = true;
               break;

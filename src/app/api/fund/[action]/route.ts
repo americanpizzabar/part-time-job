@@ -80,7 +80,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
 
     const updated = await prisma.indexFund.update({
       where: { id: fund.id },
-      data: { currentValue: fund.currentValue + amount },
+      data: {
+        currentValue: fund.currentValue + amount,
+        // Anchor lastReturnAt so applyMonthlyReturnIfNeeded can start counting from now
+        lastReturnAt: fund.lastReturnAt ?? todayStr,
+      },
     });
 
     return NextResponse.json(updated);
