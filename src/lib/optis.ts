@@ -117,18 +117,97 @@ export const STAGE_LABEL: Record<number, string> = {
   3: "最終形態",
 };
 
-// --- キャラクターのモーション(タップ反応) --------------------
-export const MOTIONS: { id: string; text: string; anim: string }[] = [
-  { id: "wave", text: "やっほー！今日もえらい！", anim: "optis-bounce" },
-  { id: "spin", text: "エネルギー充填、いい感じ⚡", anim: "optis-spin" },
-  { id: "wink", text: "Wantsを我慢できたら進化が早まるよ😉", anim: "optis-tilt" },
-  { id: "pulse", text: "コアがドクン…って鳴ってる！", anim: "optis-pulse" },
-  { id: "jump", text: "次の進化まであと少し…かも？", anim: "optis-jump" },
-];
+// --- AIブレイン(性格タイプ) -----------------------------------
+export type BrainType = "IMPULSIVE" | "ANALYTICAL" | "FRUGAL" | "BALANCED";
 
-export function randomMotion() {
-  return MOTIONS[Math.floor(Math.random() * MOTIONS.length)];
+export const BRAIN_META: Record<BrainType, { label: string; emoji: string; color: string; desc: string }> = {
+  IMPULSIVE: {
+    label: "熱血・直感型",
+    emoji: "🔥",
+    color: "#ef4444",
+    desc: "行動力No.1。即決で動くが、時に立ち止まると最強になれる。",
+  },
+  ANALYTICAL: {
+    label: "冷静・参謀型",
+    emoji: "🧠",
+    color: "#3b82f6",
+    desc: "データを読んで最適解を出す知将タイプ。",
+  },
+  FRUGAL: {
+    label: "堅実・倹約型",
+    emoji: "💎",
+    color: "#10b981",
+    desc: "Needsへの投資を大切にする計画の鉄人。",
+  },
+  BALANCED: {
+    label: "バランス・万能型",
+    emoji: "⚖️",
+    color: "#8b5cf6",
+    desc: "状況を問わず柔軟に対応できる万能型。",
+  },
+};
+
+// 性格別タップメッセージ
+export const BRAIN_MOTIONS: Record<BrainType, { id: string; text: string; anim: string }[]> = {
+  IMPULSIVE: [
+    { id: "warn", text: "おい！またすぐ買おうとしてるだろ！裏画面でシミュレーションしてからにしろ！🔥", anim: "optis-bounce" },
+    { id: "hype", text: "その直感、時には当たる！でも財布と要相談だぞ！", anim: "optis-spin" },
+    { id: "cool", text: "衝動買い前に3秒待ってみな。それだけでかなり変わるぞ。", anim: "optis-tilt" },
+    { id: "fire", text: "熱血エネルギー充填中⚡ 次のプロジェクトに向けて貯めるぞ！", anim: "optis-pulse" },
+  ],
+  ANALYTICAL: [
+    { id: "tip", text: "前回の検討から3日が経過しました。今が買い時かもしれません。", anim: "optis-pulse" },
+    { id: "data", text: "データ分析完了。今週の支出ペースは計画通りです。優秀。", anim: "optis-tilt" },
+    { id: "sim", text: "裏画面でシミュレーションしてみよう。最適ルートが見えるはずだ。", anim: "optis-jump" },
+    { id: "plan", text: "熟考型の直感は正確だ。そのまま慎重に進め。🧠", anim: "optis-bounce" },
+  ],
+  FRUGAL: [
+    { id: "praise", text: "Needsへの投資は自分への最高の贈り物だ。そのまま続けろ！💎", anim: "optis-bounce" },
+    { id: "goal", text: "貯金ペースが順調。このままプロジェクトを達成しよう！", anim: "optis-spin" },
+    { id: "evolve", text: "今週も予算内で最高のやりくり。プロフェッショナル形態に近づいてるぞ。", anim: "optis-pulse" },
+    { id: "power", text: "倹約型のエネルギーは静かで強い。ドンドン充填してくぞ。", anim: "optis-jump" },
+  ],
+  BALANCED: [
+    { id: "wave", text: "やっほー！今日もえらい！", anim: "optis-bounce" },
+    { id: "spin", text: "エネルギー充填、いい感じ⚡", anim: "optis-spin" },
+    { id: "wink", text: "Needsを意識して使えると、プロフェッショナル形態に近づくぞ😉", anim: "optis-tilt" },
+    { id: "pulse", text: "コアがドクン…って鳴ってる！", anim: "optis-pulse" },
+    { id: "jump", text: "次の進化まであと少し…かも？", anim: "optis-jump" },
+  ],
+};
+
+export function randomMotion(brain: BrainType = "BALANCED") {
+  const list = BRAIN_MOTIONS[brain];
+  return list[Math.floor(Math.random() * list.length)];
 }
+
+// --- ギルド同盟 ------------------------------------------------
+// 現在のISO週番号文字列(例: "2026-W23")
+export function currentISOWeek(d: Date = new Date()): string {
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const startOfWeek1 = new Date(jan4);
+  startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+  const diff = d.getTime() - startOfWeek1.getTime();
+  const week = Math.ceil((diff / 86400000 + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+// ギルドオーラ: 全員が今週達成済みかチェック
+export function isGuildAuraActive(members: { budgetMetWeek: string | null }[]): boolean {
+  if (members.length < 2) return false;
+  const w = currentISOWeek();
+  return members.every(m => m.budgetMetWeek === w);
+}
+
+// --- Gコイン報酬テーブル --------------------------------------
+export const GCOIN_REWARDS: Record<Rarity, number> = {
+  COMMON: 5,
+  UNCOMMON: 12,
+  RARE: 30,
+  LEGENDARY: 80,
+};
+export const GCOIN_BUDGET_CLEAR = 20; // 週予算達成ボーナス
+export const GCOIN_BANK_RATE = 0.10;  // 週利10%
 
 // --- ルーレット(ジャックポット) -----------------------------
 export const RARITY_META: Record<Rarity, { label: string; color: string; glow: string }> = {

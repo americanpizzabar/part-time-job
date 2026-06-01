@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { today } from "@/lib/dateUtils";
 import { getOptisState, parseUnlocked, isRouletteBoostEligible } from "@/lib/optisServer";
-import { rollRarity, pickReward, RARITY_META } from "@/lib/optis";
+import { rollRarity, pickReward, RARITY_META, GCOIN_REWARDS } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +24,10 @@ export async function POST() {
   const unlocked = parseUnlocked(state.unlockedParts);
   const reward = pickReward(rarity, unlocked);
 
-  const data: { lastSpinDate: string; experience?: number; unlockedParts?: string } = {
+  const gcoinBonus = GCOIN_REWARDS[rarity];
+  const data: { lastSpinDate: string; experience?: number; unlockedParts?: string; gcoins: number } = {
     lastSpinDate: todayStr,
+    gcoins: state.gcoins + gcoinBonus,
   };
   if (reward.part) {
     data.unlockedParts = JSON.stringify([...unlocked, reward.part.id]);
@@ -52,5 +54,7 @@ export async function POST() {
     boosted,
     reward,
     experience: updated.experience,
+    gcoinBonus,
+    gcoins: updated.gcoins,
   });
 }

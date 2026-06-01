@@ -151,6 +151,7 @@ model OptisState {
   nmdDate          String?   // ノーマネーデー申告日 "YYYY-MM-DD"
   freezeUntil      DateTime? // 凍結解除時刻(不正検知ペナルティ)
   awakening        Int       @default(0) // Needs(自己投資)購入で蓄積する覚醒値
+  gcoins           Int       @default(0) // ゲーム内仮想コイン(バンク/ショップ用)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -220,4 +221,64 @@ model Mission {
   clearedAt   DateTime?
   approvedAt  DateTime?
   updatedAt   DateTime  @updatedAt
+}
+
+// ─── ギルド(バジェット同盟) ──────────────────────────────────────────
+model Guild {
+  id         Int               @id @default(autoincrement())
+  name       String
+  inviteCode String            @unique
+  auraColor  String            @default("#06b6d4")
+  createdAt  DateTime          @default(now())
+  members    GuildMembership[]
+}
+
+model GuildMembership {
+  id             Int      @id @default(autoincrement())
+  guild          Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  guildId        Int
+  nickname       String
+  isOwner        Boolean  @default(false)
+  budgetMetWeek  String?  // ISO週番号 "YYYY-Www" - 予算達成した週
+  createdAt      DateTime @default(now())
+
+  @@unique([guildId, nickname])
+}
+
+// ─── パーツトレード(近距離トークン交換) ─────────────────────────────
+model TradeOffer {
+  id          Int      @id @default(autoincrement())
+  offerPartId String   // 渡すパーツ
+  wantPartId  String?  // 希望パーツ(null=おまかせ)
+  token       String   @unique
+  status      String   @default("OPEN") // OPEN | COMPLETED | EXPIRED
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+}
+
+// ─── 成果報告(エンジェル投資リターン) ────────────────────────────────
+model OutcomeReport {
+  id         Int      @id @default(autoincrement())
+  projectId  Int
+  content    String
+  imageUrl   String?
+  metric     String?  // "テスト+10点" など
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  rewardPart String?  // 承認時に解放するパーツID
+  parentNote String?
+  createdAt  DateTime @default(now())
+  approvedAt DateTime?
+}
+
+// ─── タイムワープ・バンク(仮想銀行) ──────────────────────────────────
+model VirtualBankDeposit {
+  id             Int      @id @default(autoincrement())
+  principal      Int      // 預け入れGコイン数
+  depositDate    String   // "YYYY-MM-DD"
+  maturityDate   String   // "YYYY-MM-DD"(7日後)
+  ratePercent    Int      @default(10) // 週利(%)
+  status         String   @default("ACTIVE") // ACTIVE | MATURED | WITHDRAWN
+  interestEarned Int      @default(0)
+  createdAt      DateTime @default(now())
+  settledAt      DateTime?
 }

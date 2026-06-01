@@ -5,6 +5,16 @@ import { formatJPY } from "@/lib/dateUtils";
 import { projectProgress, boostPerContribution } from "@/lib/optis";
 import BoostSequence from "@/components/BoostSequence";
 
+interface OutcomeReport {
+  id: number;
+  projectId: number;
+  content: string;
+  metric: string | null;
+  photoUrl: string | null;
+  status: string;
+  rewardPartId: string | null;
+}
+
 interface Contribution {
   id: number;
   amount: number;
@@ -141,16 +151,24 @@ function ProjectCard({ project, onContribute }: { project: Project; onContribute
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [outcomes, setOutcomes] = useState<OutcomeReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NewProjectForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [boostAnim, setBoostAnim] = useState<{ mode: "boost" | "complete"; amount?: number; name: string } | null>(null);
+  const [reportProject, setReportProject] = useState<Project | null>(null);
+  const [reportForm, setReportForm] = useState({ content: "", metric: "", photoUrl: "" });
+  const [reportSaving, setReportSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await fetch("/api/projects").then(r => r.json());
+    const [data, outs] = await Promise.all([
+      fetch("/api/projects").then(r => r.json()),
+      fetch("/api/outcome").then(r => r.json()),
+    ]);
     setProjects(data);
+    setOutcomes(outs);
     setLoading(false);
   }, []);
 
@@ -195,6 +213,25 @@ export default function ProjectsPage() {
     } else if (project.parentBoostTotal > 0) {
       setBoostAnim({ mode: "boost", amount: project.boostPerStep, name: project.name });
     }
+    load();
+  }
+
+  async function submitReport() {
+    if (!reportProject || !reportForm.content.trim()) return;
+    setReportSaving(true);
+    await fetch("/api/outcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: reportProject.id,
+        content: reportForm.content,
+        metric: reportForm.metric || undefined,
+        photoUrl: reportForm.photoUrl || undefined,
+      }),
+    });
+    setReportSaving(false);
+    setReportProject(null);
+    setReportForm({ content: "", metric: "", photoUrl: "" });
     load();
   }
 
@@ -251,9 +288,40 @@ export default function ProjectsPage() {
             {completed.length > 0 && (
               <div className="space-y-3">
                 <div className="text-sm font-bold text-gray-400">達成済み 🎉</div>
-                {completed.map(p => (
-                  <ProjectCard key={p.id} project={p} onContribute={contribute} />
-                ))}
+                {completed.map(p => {
+                  const report = outcomes.find(o => o.projectId === p.id);
+                  return (
+                    <div key={p.id}>
+                      <ProjectCard project={p} onContribute={contribute} />
+                      <div className="mt-2 mx-1">
+                        {report ? (
+                          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs ${
+                            report.status === "APPROVED" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : report.status === "REJECTED" ? "bg-red-50 text-red-600 border border-red-200"
+                            : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                          }`}>
+                            <span className="text-base">{report.status === "APPROVED" ? "🏆" : report.status === "REJECTED" ? "⚠️" : "⏳"}</span>
+                            <div>
+                              <div className="font-medium">
+                                {report.status === "APPROVED" ? "成果報告が承認されました！" : report.status === "REJECTED" ? "成果報告が却下されました" : "成果報告 審査中…"}
+                              </div>
+                              {report.status === "APPROVED" && report.rewardPartId && (
+                                <div className="text-[11px] mt-0.5">レアパーツをゲット！</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setReportProject(p); setReportForm({ content: "", metric: "", photoUrl: "" }); }}
+                            className="w-full bg-violet-600 text-white text-sm font-bold py-2.5 rounded-xl active:scale-95 transition-transform"
+                          >
+                            📋 成果報告を提出する →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -266,6 +334,69 @@ export default function ProjectsPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* 成果報告モーダル */}
+        {reportProject && (
+          <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-4">
+            <div className="bg-white w-full max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📋</span>
+                <h2 className="text-lg font-bold text-gray-800">成果報告</h2>
+              </div>
+              <div className="text-sm text-gray-500 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2">
+                <span className="font-medium text-violet-700">🎯 {reportProject.name}</span>
+                <br />報告内容を親に送ります。承認されるとレアパーツがゲットできます！
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600">達成の感想・学んだこと <span className="text-red-400">*</span></label>
+                <textarea
+                  rows={4}
+                  className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-400 resize-none"
+                  placeholder="このプロジェクトを通して何を学んだか、どんな気持ちだったかを書いてみよう"
+                  value={reportForm.content}
+                  onChange={e => setReportForm({ ...reportForm, content: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600">数値で見る成果（任意）</label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-400"
+                  placeholder="例: 3ヶ月で目標の85%達成、週2回コンスタントに積み立て"
+                  value={reportForm.metric}
+                  onChange={e => setReportForm({ ...reportForm, metric: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600">証拠写真のURL（任意）</label>
+                <input
+                  className="mt-1 w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-400"
+                  placeholder="https://..."
+                  value={reportForm.photoUrl}
+                  onChange={e => setReportForm({ ...reportForm, photoUrl: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setReportProject(null)}
+                  className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-2.5 font-semibold"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={submitReport}
+                  disabled={reportSaving || !reportForm.content.trim()}
+                  className="flex-1 bg-violet-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-40"
+                >
+                  {reportSaving ? "送信中…" : "報告を送る"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* 新規プロジェクト作成モーダル */}

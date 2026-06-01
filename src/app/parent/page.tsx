@@ -60,11 +60,24 @@ interface LunchRecord {
   imageUrl: string | null;
 }
 
+interface OutcomeReport {
+  id: number;
+  projectId: number;
+  content: string;
+  metric: string | null;
+  photoUrl: string | null;
+  imageUrl: string | null;
+  status: string;
+  rewardPartId: string | null;
+  project: { name: string };
+}
+
 export default function ParentPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [presentations, setPresentations] = useState<Presentation[]>([]);
   const [lunches, setLunches] = useState<LunchRecord[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [outcomeReports, setOutcomeReports] = useState<OutcomeReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<Presentation | null>(null);
   const [message, setMessage] = useState("");
@@ -77,16 +90,18 @@ export default function ParentPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [b, p, l, pr] = await Promise.all([
+      const [b, p, l, pr, outs] = await Promise.all([
         fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
         fetch("/api/presentations").then(r => r.json()),
         fetch(`/api/transactions?category=昼食&startDate=${start}&endDate=${end}`).then(r => r.json()),
         fetch("/api/projects").then(r => r.json()),
+        fetch("/api/outcome").then(r => r.json()),
       ]);
       setBalance(b);
       setPresentations(p);
       setLunches((l as LunchRecord[]).filter((t: LunchRecord) => t.imageUrl));
       setProjects(pr);
+      setOutcomeReports((outs as OutcomeReport[]).filter(o => o.status === "PENDING"));
     } finally {
       setLoading(false);
     }
@@ -112,6 +127,15 @@ export default function ParentPage() {
       body: JSON.stringify({ action, message: projectMsg[projectId] ?? undefined }),
     });
     setProjectMsg(m => ({ ...m, [projectId]: "" }));
+    fetchData();
+  }
+
+  async function respondOutcome(id: number, action: "APPROVE" | "REJECT") {
+    await fetch(`/api/outcome/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
     fetchData();
   }
 
@@ -293,6 +317,59 @@ export default function ParentPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* エンジェル投資：成果報告の審査 */}
+          {outcomeReports.length > 0 && (
+            <div>
+              <h2 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                🏆 成果報告の審査
+                <span className="text-xs bg-violet-500 text-white px-2 py-0.5 rounded-full">{outcomeReports.length} 件</span>
+              </h2>
+              <div className="space-y-3">
+                {outcomeReports.map(report => (
+                  <div key={report.id} className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center text-base flex-shrink-0">📋</div>
+                      <div>
+                        <div className="font-bold text-gray-800 text-sm">{report.project.name}</div>
+                        <div className="text-[11px] text-violet-500 mt-0.5">承認でレアパーツ解放 + 信用スコア +8</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-700 leading-relaxed">
+                      {report.content}
+                    </div>
+
+                    {report.metric && (
+                      <div className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+                        📊 {report.metric}
+                      </div>
+                    )}
+
+                    {(report.photoUrl ?? report.imageUrl) && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={(report.photoUrl ?? report.imageUrl)!} alt="成果写真" className="w-full h-40 object-cover rounded-xl" />
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => respondOutcome(report.id, "APPROVE")}
+                        className="flex-1 bg-violet-600 text-white rounded-xl py-2.5 text-sm font-bold active:scale-95 transition-transform"
+                      >
+                        承認 🏆
+                      </button>
+                      <button
+                        onClick={() => respondOutcome(report.id, "REJECT")}
+                        className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold active:scale-95 transition-transform"
+                      >
+                        却下
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

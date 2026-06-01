@@ -45,6 +45,7 @@ export async function GET() {
     equippedAccessory: state.equippedAccessory,
     unlocked,
     unlockedParts: unlocked.map(id => getPart(id)).filter(Boolean),
+    gcoins: state.gcoins,
     spunToday: state.lastSpinDate === todayStr,
     nmdToday: state.nmdDate === todayStr,
     frozen,

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { formatJPY } from "@/lib/dateUtils";
-import { OptisForm, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour } from "@/lib/optis";
+import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
 import OptisCreature from "@/components/OptisCreature";
 import QuickAddModal from "@/components/QuickAddModal";
@@ -52,6 +52,7 @@ export default function OptisLabPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [topGoal, setTopGoal] = useState<GoalSummary | null>(null);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
+  const [brainType, setBrainType] = useState<BrainType>("BALANCED");
   const [awakeBurst, setAwakeBurst] = useState(false);
   const [anim, setAnim] = useState<string>("optis-idle");
   const [bubble, setBubble] = useState<string | null>(null);
@@ -84,14 +85,16 @@ export default function OptisLabPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const [o, b, goals, projects] = await Promise.all([
+    const [o, b, goals, projects, brain] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
       fetch("/api/balance").then(r => r.json()),
       fetch("/api/goals").then(r => r.json()),
       fetch("/api/projects").then(r => r.json()),
+      fetch("/api/brain").then(r => r.json()).catch(() => ({ brainType: "BALANCED" })),
     ]);
     setOptis(o);
     setBalance(b);
+    if (brain?.brainType) setBrainType(brain.brainType as BrainType);
     const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
     setTopGoal(active.length > 0 ? active[0] : null);
     const ap = (projects as ActiveProject[]).find(p => p.status === "ACTIVE");
@@ -145,7 +148,7 @@ export default function OptisLabPage() {
       triggerAnim("optis-glitch", "…ピ…バグってる…動けない…");
       return;
     }
-    const m = randomMotion();
+    const m = randomMotion(brainType);
     triggerAnim(m.anim, m.text);
   }
 
