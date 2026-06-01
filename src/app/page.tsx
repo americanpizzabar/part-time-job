@@ -186,9 +186,8 @@ export default function OptisLabPage() {
     triggerAnim(m.anim, m.text);
   }
 
-  // コア長押し → ダークウェブ
+  // コア長押し → ダークウェブ(時間制限なし)
   function coreDown() {
-    if (!isDarkWebHour()) return;
     pressTimer.current = setTimeout(() => {
       setGlitch(true);
       setTimeout(() => { setGlitch(false); setDarkWeb(true); }, 600);
