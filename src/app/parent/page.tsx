@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { STATUS_LABELS, STATUS_COLORS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
+import MissionManager from "@/components/MissionManager";
 import { useRole } from "@/lib/useRole";
 
 interface Balance {
@@ -165,6 +166,9 @@ export default function ParentPage() {
               </div>
             )}
           </div>
+
+          {/* シークレット・ミッション */}
+          <MissionManager />
 
           {/* おねだり承認 */}
           <div>

@@ -6,7 +6,7 @@ import { useRole } from "@/lib/useRole";
 
 interface Config {
   allowance: { id: number; period: string; amount: number; startDate: string } | null;
-  aggregation: { id: number; periodDays: number; startDayOfWeek: number } | null;
+  aggregation: { id: number; periodDays: number; startDayOfWeek: number; weeklyBudget: number | null } | null;
 }
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [allowanceStart, setAllowanceStart] = useState(today());
   const [periodDays, setPeriodDays] = useState("7");
   const [startDayOfWeek, setStartDayOfWeek] = useState("1");
+  const [weeklyBudget, setWeeklyBudget] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const { role, setRole, mounted } = useRole();
@@ -39,6 +40,7 @@ export default function SettingsPage() {
         if (data.aggregation) {
           setPeriodDays(String(data.aggregation.periodDays));
           setStartDayOfWeek(String(data.aggregation.startDayOfWeek));
+          setWeeklyBudget(data.aggregation.weeklyBudget != null ? String(data.aggregation.weeklyBudget) : "");
         }
       });
   }, []);
@@ -53,7 +55,11 @@ export default function SettingsPage() {
           allowance: allowanceAmount
             ? { period: allowancePeriod, amount: Number(allowanceAmount), startDate: allowanceStart }
             : undefined,
-          aggregation: { periodDays: Number(periodDays), startDayOfWeek: Number(startDayOfWeek) },
+          aggregation: {
+            periodDays: Number(periodDays),
+            startDayOfWeek: Number(startDayOfWeek),
+            weeklyBudget: weeklyBudget === "" ? null : Number(weeklyBudget),
+          },
         }),
       });
       const data = await fetch("/api/config").then(r => r.json());
@@ -158,6 +164,18 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">週予算（円）</label>
+          <input
+            type="number"
+            value={weeklyBudget}
+            onChange={e => setWeeklyBudget(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="例: 1500（未設定なら宝箱なし）"
+            min="0"
+          />
+          <p className="text-xs text-gray-500 mt-1">月〜土の支出がこの額以下なら、日曜にマイルストーン・チェスト（レアパーツ確定）が出現します</p>
         </div>
       </div>
 

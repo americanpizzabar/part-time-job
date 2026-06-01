@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRole } from "@/lib/useRole";
 
 const items = [
+  { href: "/tasks", label: "お手伝いカレンダー", icon: "🧹", desc: "お手伝いをチェックして稼ぐ" },
   { href: "/chores", label: "お手伝い設定", icon: "📋", desc: "お手伝いの種類とスケジュール" },
   { href: "/allowance", label: "おこづかい集計", icon: "💰", desc: "期間ごとの集計・支払い管理" },
   { href: "/stats", label: "統計", icon: "📊", desc: "お手伝いの達成率・推移" },
