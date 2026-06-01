@@ -46,6 +46,61 @@ body {
   70% { transform: translateY(0); }
 }
 .optis-idle { animation: optis-float 3.5s ease-in-out infinite; }
+
+/* ===== 強化アニメーション(キャラ内部) ===== */
+@keyframes optis-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.035, 0.965); }
+}
+.breathe-g { transform-origin: 100px 116px; animation: optis-breathe 2.8s ease-in-out infinite; }
+
+@keyframes aura-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.09); }
+}
+.aura-g { transform-origin: 100px 108px; animation: aura-pulse 3.2s ease-in-out infinite; }
+
+@keyframes ring-rotate { to { transform: rotate(360deg); } }
+.spin-cw { transform-origin: 100px 108px; animation: ring-rotate 16s linear infinite; }
+.spin-ccw { transform-origin: 100px 108px; animation: ring-rotate 11s linear infinite reverse; }
+.spin-fast { transform-origin: 100px 108px; animation: ring-rotate 7s linear infinite; }
+
+@keyframes core-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.core-glow { transform-origin: 100px 122px; animation: core-pulse 1.9s ease-in-out infinite; }
+
+@keyframes wing-flap-l {
+  0%, 100% { transform: rotate(6deg); }
+  50% { transform: rotate(-14deg); }
+}
+@keyframes wing-flap-r {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(14deg); }
+}
+.wing-l { transform-origin: 78px 120px; animation: wing-flap-l 2.4s ease-in-out infinite; }
+.wing-r { transform-origin: 122px 120px; animation: wing-flap-r 2.4s ease-in-out infinite; }
+
+@keyframes halo-bob {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-3px) rotate(4deg); }
+}
+.halo-g { transform-origin: 100px 56px; animation: halo-bob 3.6s ease-in-out infinite; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.twinkle { animation: twinkle 2.4s ease-in-out infinite; }
+
+@keyframes sheen-slide {
+  0% { opacity: 0; transform: translateX(-30px); }
+  20% { opacity: 0.7; }
+  60% { opacity: 0; transform: translateX(30px); }
+  100% { opacity: 0; }
+}
+.sheen { animation: sheen-slide 5s ease-in-out infinite; }
 .optis-bounce { animation: optis-bounce 0.7s ease-out; }
 .optis-spin { animation: optis-spin 0.9s ease-in-out; }
 .optis-tilt { animation: optis-tilt 0.7s ease-in-out; }
