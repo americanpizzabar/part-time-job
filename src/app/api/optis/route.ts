@@ -41,6 +41,13 @@ export async function GET() {
   });
   const crystalCount = await prisma.memoryCube.count();
 
+  // Check active quiz shield
+  const shieldAttempt = await prisma.quizAttempt.findFirst({
+    where: { correct: true, shieldUntil: { gt: new Date() } },
+    orderBy: { shieldUntil: "desc" },
+  });
+  const hasQuizShield = !!shieldAttempt;
+
   return NextResponse.json({
     id: state.id,
     experience: state.experience,
@@ -56,6 +63,8 @@ export async function GET() {
     nmdToday: state.nmdDate === todayStr,
     frozen,
     freezeUntil: state.freezeUntil,
+    langMode: state.langMode,
+    hasQuizShield,
     ...derived,
     archive: {
       resistedTotal,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
-import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice } from "@/lib/optis";
+import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WEATHER_META, WeatherType } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,28 @@ export async function GET() {
   const state = await getOptisState();
   const unlocked = parseUnlocked(state.unlockedParts);
 
+  // Check weather and shield
+  const activeWeather = await prisma.economicWeather.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const shieldAttempt = await prisma.quizAttempt.findFirst({
+    where: { correct: true, shieldUntil: { gt: new Date() } },
+    orderBy: { shieldUntil: "desc" },
+  });
+  const hasShield = !!shieldAttempt;
+
+  let weatherMultiplier = 1.0;
+  if (activeWeather && !hasShield) {
+    const meta = WEATHER_META[activeWeather.type as WeatherType];
+    if (meta) weatherMultiplier = meta.marketMultiplier;
+  }
+
   const listings = await Promise.all(
     PARTS.filter(p => p.id !== "body_core" && p.id !== "aura_basic").map(async (part) => {
       const priceRow = await getOrInitPrice(part.id);
-      const currentPrice = priceRow?.currentPrice ?? MARKET_BASE_PRICES[part.rarity];
+      const baseRawPrice = priceRow?.currentPrice ?? MARKET_BASE_PRICES[part.rarity];
+      const currentPrice = Math.round((baseRawPrice * weatherMultiplier) / 5) * 5;
       const base = MARKET_BASE_PRICES[part.rarity];
       const priceDelta = currentPrice - base;
       return {
@@ -42,7 +60,13 @@ export async function GET() {
     })
   );
 
-  return NextResponse.json({ listings, gcoins: state.gcoins });
+  return NextResponse.json({
+    listings,
+    gcoins: state.gcoins,
+    weatherMultiplier,
+    activeWeather: activeWeather ? { type: activeWeather.type, description: activeWeather.description } : null,
+    hasShield,
+  });
 }
 
 // POST: buy or sell

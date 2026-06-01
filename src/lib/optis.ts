@@ -422,3 +422,27 @@ export const FEED_CATEGORY_META: Record<string, { color: string; label: string; 
   BOOST: { color: "#f59e0b", label: "ブースト",   icon: "⚡" },
   TREND: { color: "#a855f7", label: "トレンド",   icon: "📈" },
 };
+
+// ─── 自己投資カテゴリ ─────────────────────────────────────────────────
+export const ASSET_CATEGORIES = ["STEM", "ART_CULTURE", "HEALTH_SOCIAL"] as const;
+export type AssetCategory = typeof ASSET_CATEGORIES[number];
+export const ASSET_META: Record<AssetCategory, { label: string; emoji: string; color: string; desc: string }> = {
+  STEM:          { label: "理系・技術",   emoji: "🔬", color: "#3b82f6", desc: "科学・プログラミング・塾・文房具" },
+  ART_CULTURE:   { label: "感性・文化",   emoji: "🎨", color: "#ec4899", desc: "本・映画・音楽・美術・推し活" },
+  HEALTH_SOCIAL: { label: "体・社会",     emoji: "💪", color: "#10b981", desc: "部活・スポーツ・友人関係・健康" },
+};
+
+// ─── 経済ウェザー ─────────────────────────────────────────────────────
+export type WeatherType = "NEUTRAL" | "INFLATION" | "DEFLATION" | "YEN_STRONG" | "YEN_WEAK" | "RATE_HIKE";
+export const WEATHER_META: Record<WeatherType, { label: string; emoji: string; color: string; marketMultiplier: number; desc: string }> = {
+  NEUTRAL:   { label: "平常",        emoji: "⛅", color: "#94a3b8", marketMultiplier: 1.0,  desc: "特に経済異常なし" },
+  INFLATION: { label: "インフレ警報", emoji: "🔥", color: "#ef4444", marketMultiplier: 1.2,  desc: "物価上昇中。パーツ価格+20%" },
+  DEFLATION: { label: "デフレ注意",  emoji: "❄️", color: "#06b6d4", marketMultiplier: 0.85, desc: "物価下落中。今が買い時" },
+  YEN_STRONG:{ label: "円高",        emoji: "💹", color: "#10b981", marketMultiplier: 0.8,  desc: "海外パーツが割安に" },
+  YEN_WEAK:  { label: "円安警報",    emoji: "⚠️", color: "#f59e0b", marketMultiplier: 1.15, desc: "輸入品が値上がり中" },
+  RATE_HIKE: { label: "利上げ",      emoji: "🏦", color: "#8b5cf6", marketMultiplier: 1.05, desc: "金利上昇。銀行の利息が増加" },
+};
+
+export const QUIZ_SHIELD_DAYS = 7;
+export const QUIZ_CORRECT_EXP = 50;
+export const EN_MODE_EXP_MULTIPLIER = 1.5;
