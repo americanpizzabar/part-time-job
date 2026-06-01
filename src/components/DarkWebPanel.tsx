@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { formatJPY } from "@/lib/dateUtils";
-import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice } from "@/lib/optis";
+import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType } from "@/lib/optis";
 import GuildPanel from "@/components/GuildPanel";
 
 interface DarkWebPanelProps {
-  optis: { level: number; intoLevel: number; needed: number; experience: number; creditScore: number; gcoins?: number; generation?: number };
+  optis: { level: number; intoLevel: number; needed: number; experience: number; creditScore: number; gcoins?: number; generation?: number; langMode?: string; hasQuizShield?: boolean };
   onExit: () => void;
   onChanged: () => void;
 }
@@ -18,6 +18,7 @@ interface FullState {
   unlocked: string[];
   gcoins: number;
   generation: number;
+  langMode: string;
 }
 
 interface SimData {
@@ -44,19 +45,45 @@ interface MarketListing {
   totalBought: number; totalSold: number;
 }
 
+interface MarketData {
+  listings: MarketListing[];
+  gcoins: number;
+  activeWeather: { type: string; description: string } | null;
+  weatherMultiplier: number;
+  hasShield: boolean;
+}
+
 interface FeedItem {
   id: number; title: string; body: string; category: string;
   effectJson: string | null; isActive: boolean; publishedAt: string;
 }
 
-type Tab = "matrix" | "market" | "feed" | "brain" | "bank" | "guild" | "closet" | "status";
+interface CareerData {
+  categories: { name: string; total: number; pct: number }[];
+  total: number;
+  topCategory: string | null;
+}
+
+interface FundData {
+  id: number; invested: number; currentValue: number;
+  parentMatchRate: number; baseReturnRate: number; lastReturnAt: string | null;
+  growthAmount: number; growthPct: number;
+  recentTxs: { id: number; amount: number; type: string; date: string; memo: string | null }[];
+}
+
+interface QuizStatus {
+  quiz: { id: number; question: string; weatherType: string } | null;
+  hasShield: boolean;
+  shieldUntil: string | null;
+}
+
+type Tab = "matrix" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
 
 function calcPriceHack(nowPrice: number, waitMonths: number, dropPct: number) {
   const future = Math.round(nowPrice * (1 - dropPct / 100));
   return { future, saved: nowPrice - future };
 }
 
-// Mini sparkline SVG component
 function Sparkline({ prices, color }: { prices: number[]; color: string }) {
   if (prices.length < 2) return <span className="text-[10px] text-cyan-800">—</span>;
   const min = Math.min(...prices);
@@ -71,13 +98,28 @@ function Sparkline({ prices, color }: { prices: number[]; color: string }) {
   );
 }
 
+function FundSparkline({ txs, color }: { txs: { amount: number; type: string }[]; color: string }) {
+  if (txs.length < 2) return <span className="text-[10px] text-cyan-800">—</span>;
+  const values: number[] = [];
+  let running = 0;
+  for (const tx of [...txs].reverse()) {
+    if (tx.type === "INVEST" || tx.type === "RETURN" || tx.type === "PARENT_BONUS") running += tx.amount;
+    else if (tx.type === "WITHDRAW") running = Math.max(0, running - tx.amount);
+    values.push(running);
+  }
+  return <Sparkline prices={values} color={color} />;
+}
+
 export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelProps) {
   const [state, setState] = useState<FullState | null>(null);
   const [sim, setSim] = useState<SimData | null>(null);
   const [brain, setBrain] = useState<BrainData | null>(null);
   const [bankData, setBankData] = useState<{ gcoins: number; deposits: BankDeposit[] } | null>(null);
-  const [market, setMarket] = useState<{ listings: MarketListing[]; gcoins: number } | null>(null);
+  const [market, setMarket] = useState<MarketData | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [career, setCareer] = useState<CareerData | null>(null);
+  const [fund, setFund] = useState<FundData | null>(null);
+  const [quizStatus, setQuizStatus] = useState<QuizStatus | null>(null);
   const [tab, setTab] = useState<Tab>("matrix");
   const [depositAmt, setDepositAmt] = useState("");
   const [depositMsg, setDepositMsg] = useState("");
@@ -87,6 +129,10 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [phNow, setPhNow] = useState("");
   const [phMonths, setPhMonths] = useState("3");
   const [phDrop, setPhDrop] = useState("30");
+  const [fundInvestAmt, setFundInvestAmt] = useState("");
+  const [fundWithdrawAmt, setFundWithdrawAmt] = useState("");
+  const [fundMsg, setFundMsg] = useState("");
+  const [langMsg, setLangMsg] = useState("");
 
   const load = () => {
     fetch("/api/optis").then(r => r.json()).then(setState);
@@ -95,6 +141,9 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/bank").then(r => r.json()).then(setBankData);
     fetch("/api/market").then(r => r.json()).then(setMarket);
     fetch("/api/feed").then(r => r.json()).then(setFeed);
+    fetch("/api/career").then(r => r.json()).then(setCareer);
+    fetch("/api/fund").then(r => r.json()).then(setFund);
+    fetch("/api/quiz").then(r => r.json()).then(setQuizStatus);
   };
   useEffect(() => { load(); }, []);
 
@@ -162,9 +211,59 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     setPartHistory(data.history ?? []);
   }
 
+  async function fundInvest() {
+    const amt = Number(fundInvestAmt);
+    if (!amt || amt <= 0) return;
+    const r = await fetch("/api/fund", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amt }),
+    });
+    const data = await r.json();
+    setFundMsg(r.ok ? `✅ ${formatJPY(amt)} を投資しました` : `❌ ${data.error}`);
+    setFundInvestAmt("");
+    fetch("/api/fund").then(r => r.json()).then(setFund);
+    onChanged();
+  }
+
+  async function fundWithdrawAction() {
+    const amt = Number(fundWithdrawAmt);
+    if (!amt || amt <= 0) return;
+    const r = await fetch("/api/fund/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amt }),
+    });
+    const data = await r.json();
+    setFundMsg(r.ok ? `💸 ${formatJPY(amt)} を引き出しました` : `❌ ${data.error}`);
+    setFundWithdrawAmt("");
+    fetch("/api/fund").then(r => r.json()).then(setFund);
+    onChanged();
+  }
+
+  async function toggleLang() {
+    const currentLang = state?.langMode ?? "JA";
+    const newLang = currentLang === "JA" ? "EN" : "JA";
+    const r = await fetch("/api/optis/lang", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ langMode: newLang }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      setLangMsg(newLang === "EN" ? "🌏 英語モード ON! EXP×1.5" : "🇯🇵 日本語モードに切り替えました");
+      fetch("/api/optis").then(r => r.json()).then(setState);
+      onChanged();
+    } else {
+      setLangMsg(`❌ ${data.error}`);
+    }
+    setTimeout(() => setLangMsg(""), 3000);
+  }
+
   const expRemain = optis.needed - optis.intoLevel;
   const gcoins = state?.gcoins ?? optis.gcoins ?? 0;
   const generation = state?.generation ?? optis.generation ?? 1;
+  const langMode = state?.langMode ?? optis.langMode ?? "JA";
   const topCats = sim?.categories.slice(0, 4) ?? [];
 
   function daysToGoal(extra: number) {
@@ -179,12 +278,20 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   }
 
   const TABS: [Tab, string][] = [
-    ["matrix", "MATRIX"], ["market", "MARKET"], ["feed", "FEED"], ["brain", "BRAIN"],
-    ["bank", "BANK"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
+    ["matrix", "MATRIX"], ["market", "MARKET"], ["quiz", "QUIZ"], ["brain", "BRAIN"], ["feed", "FEED"],
+    ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
   ];
 
   const buyable = market?.listings.filter(l => !l.owned).sort((a, b) => a.currentPrice - b.currentPrice) ?? [];
   const sellable = market?.listings.filter(l => l.owned && !l.equipped) ?? [];
+
+  const daysUntilReturn = (() => {
+    if (!fund?.lastReturnAt) return null;
+    const last = new Date(fund.lastReturnAt);
+    const next = new Date(last.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const diff = Math.ceil((next.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  })();
 
   return (
     <div className="fixed inset-0 z-[70] dark-web dark-web-grid overflow-y-auto">
@@ -203,8 +310,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           <button onClick={onExit} className="text-cyan-300 border border-cyan-500/50 rounded-lg px-3 py-1 text-xs">EXIT ▸</button>
         </div>
 
-        {/* 8タブ (2行×4列) */}
-        <div className="grid grid-cols-4 gap-1 mb-5">
+        {/* 10タブ (2行×5列) */}
+        <div className="grid grid-cols-5 gap-1 mb-5">
           {TABS.map(([t, l]) => (
             <button key={t} onClick={() => setTab(t)}
               className={`py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
@@ -314,6 +421,22 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 <div className="text-emerald-300 text-2xl font-black">{gcoins} <span className="text-xs">G</span></div>
               </div>
 
+              {market?.activeWeather && (
+                <div className="text-xs bg-red-900/30 border border-red-700/40 rounded-lg p-2 mb-3">
+                  {(() => {
+                    const wMeta = WEATHER_META[market.activeWeather!.type as WeatherType] ?? WEATHER_META.NEUTRAL;
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <span>{wMeta.emoji}</span>
+                        <span className="text-red-300 font-bold">{wMeta.label}</span>
+                        <span className="text-red-400">×{market.weatherMultiplier.toFixed(2)}</span>
+                        {market.hasShield && <span className="ml-auto text-cyan-400 font-bold">🛡 シールド中</span>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {marketMsg && (
                 <div className="text-xs text-emerald-200 bg-emerald-900/30 border border-emerald-700/30 rounded-lg p-2 mb-3">
                   {marketMsg}
@@ -321,7 +444,6 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
               )}
             </div>
 
-            {/* 価格チャート(選択パーツ) */}
             {selectedPart && partHistory.length > 0 && (() => {
               const p = PARTS.find(x => x.id === selectedPart);
               const prices = partHistory.map(h => h.price);
@@ -344,7 +466,6 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
               );
             })()}
 
-            {/* 売却可能 */}
             {sellable.length > 0 && (
               <div className="border border-yellow-600/30 rounded-xl p-3 bg-black/40">
                 <div className="text-[10px] text-yellow-500 tracking-widest mb-2">// SELL — 所持パーツ(装備外)</div>
@@ -359,23 +480,14 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                           <span className="ml-1">{listing.trend === "up" ? "↑" : listing.trend === "down" ? "↓" : "―"}</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => loadChart(listing.id)}
-                        className="text-[10px] text-emerald-700 border border-emerald-900/40 rounded px-1.5 py-0.5">
-                        📈
-                      </button>
-                      <button
-                        onClick={() => sellPart(listing.id)}
-                        className="text-[10px] text-yellow-400 border border-yellow-700/40 rounded px-2 py-1 font-bold">
-                        売る
-                      </button>
+                      <button onClick={() => loadChart(listing.id)} className="text-[10px] text-emerald-700 border border-emerald-900/40 rounded px-1.5 py-0.5">📈</button>
+                      <button onClick={() => sellPart(listing.id)} className="text-[10px] text-yellow-400 border border-yellow-700/40 rounded px-2 py-1 font-bold">売る</button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* 購入可能 */}
             <div className="border border-emerald-600/30 rounded-xl p-3 bg-black/40">
               <div className="text-[10px] text-emerald-500 tracking-widest mb-2">// BUY — パーツを購入</div>
               {buyable.length === 0 ? (
@@ -399,14 +511,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                             <span style={{ color: priceColor }}>{listing.trend === "up" ? "↑" : listing.trend === "down" ? "↓" : "―"}</span>
                           </div>
                         </div>
-                        <button
-                          onClick={() => loadChart(listing.id)}
-                          className="text-[10px] text-emerald-700 border border-emerald-900/40 rounded px-1.5 py-0.5">
-                          📈
-                        </button>
-                        <button
-                          onClick={() => buyPart(listing.id)}
-                          disabled={!canAfford}
+                        <button onClick={() => loadChart(listing.id)} className="text-[10px] text-emerald-700 border border-emerald-900/40 rounded px-1.5 py-0.5">📈</button>
+                        <button onClick={() => buyPart(listing.id)} disabled={!canAfford}
                           className="text-[10px] text-emerald-400 border border-emerald-700/40 rounded px-2 py-1 font-bold disabled:opacity-30">
                           買う
                         </button>
@@ -416,6 +522,61 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── QUIZ ─────────────────────────────────────────────── */}
+        {tab === "quiz" && (
+          <div className="space-y-3">
+            <div className="border border-red-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-red-400 tracking-widest mb-1">// NEWS_QUIZ — 経済ウェザー対策</div>
+              <div className="text-[10px] text-red-700 mb-3">クイズに正解すると7日間の経済の盾を獲得。市場価格への影響を無効化。</div>
+            </div>
+
+            <div className="border border-cyan-500/30 rounded-xl p-3 bg-black/40">
+              <div className="text-[10px] text-cyan-600 tracking-widest mb-2">// SHIELD_STATUS</div>
+              {quizStatus?.hasShield ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🛡</span>
+                  <div>
+                    <div className="text-cyan-300 font-bold text-sm">経済の盾 — アクティブ</div>
+                    {quizStatus.shieldUntil && (
+                      <div className="text-cyan-600 text-[10px]">
+                        有効期限: {new Date(quizStatus.shieldUntil).toLocaleDateString("ja-JP")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-cyan-800 text-xs font-mono">シールドなし — クイズに正解して取得しよう</div>
+              )}
+            </div>
+
+            {quizStatus?.quiz ? (() => {
+              const wMeta = WEATHER_META[quizStatus.quiz!.weatherType as WeatherType] ?? WEATHER_META.NEUTRAL;
+              return (
+                <div className="border rounded-xl p-4 bg-black/40" style={{ borderColor: `${wMeta.color}40` }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">{wMeta.emoji}</span>
+                    <div>
+                      <div className="font-bold text-sm" style={{ color: wMeta.color }}>{wMeta.label}</div>
+                      <div className="text-[10px] text-gray-500">{wMeta.desc}</div>
+                    </div>
+                    <div className="ml-auto text-[10px] font-mono" style={{ color: wMeta.color }}>
+                      ×{wMeta.marketMultiplier}
+                    </div>
+                  </div>
+                  <div className="text-gray-400 text-xs mt-2 bg-gray-900/40 rounded-lg p-2">
+                    Q: {quizStatus.quiz!.question}
+                  </div>
+                  <div className="text-[10px] text-cyan-600 mt-2">ホーム画面のバナーからクイズに挑戦しよう</div>
+                </div>
+              );
+            })() : (
+              <div className="text-cyan-700 text-xs font-mono text-center py-4 border border-cyan-900/30 rounded-xl">
+                現在アクティブなクイズはありません
+              </div>
+            )}
           </div>
         )}
 
@@ -498,6 +659,37 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 </>
               )}
             </div>
+
+            {/* CAREER_MATRIX */}
+            <div className="border border-blue-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-blue-400 tracking-widest mb-3">// CAREER_MATRIX — 自己投資分析 (直近90日)</div>
+              {!career ? <div className="text-blue-600 text-xs font-mono">LOADING…</div> : career.total === 0 ? (
+                <div className="text-blue-700 text-xs font-mono text-center py-2">カテゴリ付きNeeds記録がありません</div>
+              ) : (
+                <div className="space-y-3">
+                  {career.categories.map(cat => {
+                    const meta = ASSET_META[cat.name as keyof typeof ASSET_META];
+                    if (!meta) return null;
+                    return (
+                      <div key={cat.name}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span style={{ color: meta.color }}>{meta.emoji} {meta.label}</span>
+                          <span className="text-gray-400 font-mono">{formatJPY(cat.total)} ({cat.pct}%)</span>
+                        </div>
+                        <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${cat.pct}%`, backgroundColor: meta.color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {career.topCategory && (
+                    <div className="text-[10px] text-blue-400 mt-2">
+                      TOP: {ASSET_META[career.topCategory as keyof typeof ASSET_META]?.emoji} {ASSET_META[career.topCategory as keyof typeof ASSET_META]?.label}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -560,6 +752,103 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           </div>
         )}
 
+        {/* ── FUND ─────────────────────────────────────────────── */}
+        {tab === "fund" && (
+          <div className="space-y-3">
+            <div className="border border-indigo-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-indigo-400 tracking-widest mb-1">// INDEX_FUND — ジュニア・ファンド</div>
+              <div className="text-[10px] text-indigo-700 mb-3">長期インデックス投資シミュレーション。月次リターンで複利運用。</div>
+              {!fund ? <div className="text-indigo-600 text-xs font-mono">LOADING…</div> : (
+                <>
+                  <div className="grid grid-cols-2 gap-3 font-mono mb-4">
+                    <div>
+                      <div className="text-indigo-600 text-[10px]">CURRENT_VALUE</div>
+                      <div className="text-indigo-200 text-xl font-black">{formatJPY(fund.currentValue)}</div>
+                    </div>
+                    <div>
+                      <div className="text-indigo-600 text-[10px]">INVESTED</div>
+                      <div className="text-indigo-300 text-sm">{formatJPY(fund.invested)}</div>
+                    </div>
+                    <div>
+                      <div className="text-indigo-600 text-[10px]">GROWTH</div>
+                      <div className={`text-sm font-bold ${fund.growthAmount >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                        {fund.growthAmount >= 0 ? "+" : ""}{formatJPY(fund.growthAmount)} ({fund.growthPct}%)
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-indigo-600 text-[10px]">ANNUAL_RATE</div>
+                      <div className="text-indigo-300 text-sm">{fund.baseReturnRate}%</div>
+                    </div>
+                  </div>
+
+                  {fund.recentTxs.length >= 2 && (
+                    <div className="mb-3">
+                      <div className="text-[10px] text-indigo-600 mb-1">VALUE TREND</div>
+                      <FundSparkline txs={fund.recentTxs} color="#818cf8" />
+                    </div>
+                  )}
+
+                  {daysUntilReturn !== null && (
+                    <div className="text-[10px] text-indigo-500 mb-3">
+                      次の月次リターン: {daysUntilReturn === 0 ? "本日！" : `あと ${daysUntilReturn} 日`}
+                    </div>
+                  )}
+
+                  {fundMsg && (
+                    <div className="text-xs text-indigo-200 bg-indigo-900/30 border border-indigo-700/30 rounded-lg p-2 mb-3">
+                      {fundMsg}
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <div className="text-[10px] text-indigo-500 mb-1">投資する(財布から引き落とし)</div>
+                    <div className="flex gap-2">
+                      <input type="number" value={fundInvestAmt} onChange={e => setFundInvestAmt(e.target.value)}
+                        className="flex-1 bg-black/40 border border-indigo-700/50 text-indigo-100 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        placeholder="円" min={1} />
+                      <button onClick={fundInvest} disabled={!fundInvestAmt || Number(fundInvestAmt) <= 0}
+                        className="bg-indigo-700 text-white rounded-lg px-4 text-sm font-bold disabled:opacity-40">
+                        投資
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] text-indigo-500 mb-1">引き出す(財布に戻す)</div>
+                    <div className="flex gap-2">
+                      <input type="number" value={fundWithdrawAmt} onChange={e => setFundWithdrawAmt(e.target.value)}
+                        className="flex-1 bg-black/40 border border-indigo-700/50 text-indigo-100 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        placeholder="円" min={1} />
+                      <button onClick={fundWithdrawAction}
+                        disabled={!fundWithdrawAmt || Number(fundWithdrawAmt) <= 0 || Number(fundWithdrawAmt) > (fund?.currentValue ?? 0)}
+                        className="bg-indigo-600/50 text-indigo-200 rounded-lg px-4 text-sm font-bold disabled:opacity-40 border border-indigo-600/40">
+                        引出
+                      </button>
+                    </div>
+                  </div>
+
+                  {fund.recentTxs.length > 0 && (
+                    <div className="mt-4">
+                      <div className="text-[10px] text-indigo-600 tracking-widest mb-2">RECENT_TRANSACTIONS</div>
+                      <div className="space-y-1">
+                        {fund.recentTxs.slice(0, 5).map(tx => (
+                          <div key={tx.id} className="flex justify-between text-[10px] font-mono text-indigo-400">
+                            <span className={tx.type === "RETURN" ? "text-emerald-400" : tx.type === "PARENT_BONUS" ? "text-yellow-400" : tx.type === "WITHDRAW" ? "text-red-400" : "text-indigo-300"}>
+                              {tx.type === "INVEST" ? "↑" : tx.type === "WITHDRAW" ? "↓" : tx.type === "RETURN" ? "+" : "★"} {tx.type}
+                            </span>
+                            <span>{tx.type === "WITHDRAW" ? "-" : "+"}{formatJPY(tx.amount)}</span>
+                            <span className="text-indigo-700">{tx.date}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── GUILD ─────────────────────────────────────────────── */}
         {tab === "guild" && <GuildPanel unlocked={state?.unlocked ?? []} />}
 
@@ -593,31 +882,63 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
 
         {/* ── STATUS ────────────────────────────────────────────── */}
         {tab === "status" && (
-          <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
-            <div className="text-[11px] text-cyan-500 tracking-widest mb-3">// STATUS_HACK</div>
-            <div className="grid grid-cols-2 gap-3 font-mono text-sm">
-              {[
-                ["LEVEL", String(optis.level)],
-                ["CREDIT_SCORE", `${optis.creditScore}/100`],
-                ["TOTAL_EXP", String(optis.experience)],
-                ["EXP_TO_NEXT", String(expRemain)],
-                ["G_COINS", `${gcoins}G`],
-                ["GENERATION", `Gen.${generation}`],
-              ].map(([k, v]) => (
-                <div key={k}>
-                  <div className="text-cyan-600 text-[10px]">{k}</div>
-                  <div className="text-cyan-200 text-lg">{v}</div>
-                </div>
-              ))}
-            </div>
-            {generation > 1 && (
-              <div className="mt-4 pt-3 border-t border-cyan-900/40">
-                <div className="text-[10px] text-fuchsia-500 tracking-widest mb-1">// GENERATION_BONUS</div>
-                <div className="text-xs text-fuchsia-300 font-mono">EXP_MULTIPLIER: ×{(1 + (generation - 1) * 0.1).toFixed(1)}</div>
-                <div className="text-xs text-fuchsia-300 font-mono">DARK_WEB_HOUR: {generation >= 5 ? "19:00" : generation >= 3 ? "20:00" : "21:00"}〜</div>
-                <div className="text-xs text-fuchsia-300 font-mono">ADVICE_LEVEL: {generation >= 2 ? "ADVANCED" : "BASIC"}</div>
+          <div className="space-y-3">
+            <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-cyan-500 tracking-widest mb-3">// STATUS_HACK</div>
+              <div className="grid grid-cols-2 gap-3 font-mono text-sm">
+                {[
+                  ["LEVEL", String(optis.level)],
+                  ["CREDIT_SCORE", `${optis.creditScore}/100`],
+                  ["TOTAL_EXP", String(optis.experience)],
+                  ["EXP_TO_NEXT", String(expRemain)],
+                  ["G_COINS", `${gcoins}G`],
+                  ["GENERATION", `Gen.${generation}`],
+                  ["LANG_MODE", langMode],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div className="text-cyan-600 text-[10px]">{k}</div>
+                    <div className="text-cyan-200 text-lg">{v}</div>
+                  </div>
+                ))}
               </div>
-            )}
+
+              {/* EN mode toggle */}
+              <div className="mt-4 pt-3 border-t border-cyan-900/40">
+                <div className="text-[10px] text-cyan-600 mb-2 tracking-widest">// LANG_MODE</div>
+                {optis.level >= 8 ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="text-xs text-cyan-300">
+                        {langMode === "EN" ? "🌏 English Mode — EXP ×1.5" : "🇯🇵 日本語モード"}
+                      </div>
+                      <div className="text-[10px] text-cyan-700 mt-0.5">英語モードでEXP1.5倍獲得</div>
+                    </div>
+                    <button
+                      onClick={toggleLang}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${langMode === "EN"
+                        ? "bg-cyan-900/60 border-cyan-400 text-cyan-200"
+                        : "border-cyan-700/40 text-cyan-600 hover:border-cyan-500"}`}
+                    >
+                      {langMode === "EN" ? "EN ✓" : "EN オフ"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-cyan-800">英語モードはLv.8で解放 (現在 Lv.{optis.level})</div>
+                )}
+                {langMsg && (
+                  <div className="text-xs text-cyan-300 mt-2 bg-cyan-900/20 rounded-lg p-2">{langMsg}</div>
+                )}
+              </div>
+
+              {generation > 1 && (
+                <div className="mt-4 pt-3 border-t border-cyan-900/40">
+                  <div className="text-[10px] text-fuchsia-500 tracking-widest mb-1">// GENERATION_BONUS</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">EXP_MULTIPLIER: ×{(1 + (generation - 1) * 0.1).toFixed(1)}</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">DARK_WEB_HOUR: {generation >= 5 ? "19:00" : generation >= 3 ? "20:00" : "21:00"}〜</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">ADVICE_LEVEL: {generation >= 2 ? "ADVANCED" : "BASIC"}</div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

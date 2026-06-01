@@ -104,6 +104,24 @@ export default function ParentPage() {
   const [message, setMessage] = useState("");
   const [boostAnim, setBoostAnim] = useState<{ mode: "boost" | "complete"; amount?: number; name: string } | null>(null);
   const [projectMsg, setProjectMsg] = useState<Record<number, string>>({});
+  // Weather
+  const [weatherType, setWeatherType] = useState("NEUTRAL");
+  const [weatherDesc, setWeatherDesc] = useState("");
+  const [weatherPosting, setWeatherPosting] = useState(false);
+  const [weatherMsg, setWeatherMsg] = useState("");
+  // Quiz
+  const [quizQuestion, setQuizQuestion] = useState("");
+  const [quizOptions, setQuizOptions] = useState(["", "", ""]);
+  const [quizCorrect, setQuizCorrect] = useState(0);
+  const [quizExplain, setQuizExplain] = useState("");
+  const [quizPosting, setQuizPosting] = useState(false);
+  const [quizMsg, setQuizMsg] = useState("");
+  // Fund
+  const [fund, setFund] = useState<{ invested: number; currentValue: number; parentMatchRate: number; baseReturnRate: number } | null>(null);
+  const [fundMatchRate, setFundMatchRate] = useState("");
+  const [fundReturnRate, setFundReturnRate] = useState("");
+  const [fundBonus, setFundBonus] = useState("");
+  const [fundMsg, setFundMsg] = useState("");
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
@@ -111,13 +129,14 @@ export default function ParentPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [b, p, l, pr, outs, ls] = await Promise.all([
+      const [b, p, l, pr, outs, ls, fd] = await Promise.all([
         fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
         fetch("/api/presentations").then(r => r.json()),
         fetch(`/api/transactions?category=昼食&startDate=${start}&endDate=${end}`).then(r => r.json()),
         fetch("/api/projects").then(r => r.json()),
         fetch("/api/outcome").then(r => r.json()),
         fetch("/api/loan").then(r => r.json()),
+        fetch("/api/fund").then(r => r.json()),
       ]);
       setBalance(b);
       setPresentations(p);
@@ -125,6 +144,7 @@ export default function ParentPage() {
       setProjects(pr);
       setOutcomeReports((outs as OutcomeReport[]).filter(o => o.status === "PENDING"));
       setLoans((ls as FamilyLoan[]).filter(loan => loan.status === "PENDING" || loan.status === "ACTIVE"));
+      setFund(fd);
     } finally {
       setLoading(false);
     }
@@ -161,6 +181,72 @@ export default function ParentPage() {
       body: JSON.stringify({ action, interestPerMonth: ipm, parentNote: loanMsg[id] ?? undefined }),
     });
     fetchData();
+  }
+
+  async function postWeather() {
+    if (!weatherDesc.trim()) return;
+    setWeatherPosting(true);
+    const r = await fetch("/api/weather", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: weatherType, description: weatherDesc }),
+    });
+    const data = await r.json();
+    setWeatherMsg(r.ok ? `✅ 経済ウェザーを設定しました: ${weatherType}` : `❌ ${data.error}`);
+    setWeatherDesc("");
+    setWeatherPosting(false);
+    setTimeout(() => setWeatherMsg(""), 3000);
+  }
+
+  async function postQuiz() {
+    if (!quizQuestion.trim() || quizOptions.some(o => !o.trim()) || !quizExplain.trim()) return;
+    setQuizPosting(true);
+    const r = await fetch("/api/quiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: quizQuestion,
+        options: quizOptions,
+        correctIndex: quizCorrect,
+        explanation: quizExplain,
+        weatherType,
+      }),
+    });
+    const data = await r.json();
+    setQuizMsg(r.ok ? `✅ クイズを作成しました (ID: ${data.id})` : `❌ ${data.error}`);
+    setQuizQuestion(""); setQuizOptions(["", "", ""]); setQuizExplain("");
+    setQuizPosting(false);
+    setTimeout(() => setQuizMsg(""), 3000);
+  }
+
+  async function saveFundSettings() {
+    const r = await fetch("/api/fund/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        parentMatchRate: fundMatchRate ? Number(fundMatchRate) : undefined,
+        baseReturnRate: fundReturnRate ? Number(fundReturnRate) : undefined,
+      }),
+    });
+    const data = await r.json();
+    setFundMsg(r.ok ? "✅ ファンド設定を保存しました" : `❌ ${data.error}`);
+    fetchData();
+    setTimeout(() => setFundMsg(""), 3000);
+  }
+
+  async function addFundBonus() {
+    const amt = Number(fundBonus);
+    if (!amt || amt <= 0) return;
+    const r = await fetch("/api/fund/bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amt }),
+    });
+    const data = await r.json();
+    setFundMsg(r.ok ? `✅ 親ボーナス +${amt.toLocaleString()}円 を追加しました` : `❌ ${data.error}`);
+    setFundBonus("");
+    fetchData();
+    setTimeout(() => setFundMsg(""), 3000);
   }
 
   async function postFeed() {
@@ -554,6 +640,174 @@ export default function ParentPage() {
               >
                 {feedPosting ? "送信中…" : "フィードに投稿する"}
               </button>
+            </div>
+          </div>
+
+          {/* 経済ウェザー設定 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">🌤 経済ウェザー設定</h2>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+              <div>
+                <label className="text-xs text-gray-500">ウェザータイプ</label>
+                <select
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  value={weatherType}
+                  onChange={e => setWeatherType(e.target.value)}
+                >
+                  <option value="NEUTRAL">⛅ 平常</option>
+                  <option value="INFLATION">🔥 インフレ警報 (×1.2)</option>
+                  <option value="DEFLATION">❄️ デフレ注意 (×0.85)</option>
+                  <option value="YEN_STRONG">💹 円高 (×0.8)</option>
+                  <option value="YEN_WEAK">⚠️ 円安警報 (×1.15)</option>
+                  <option value="RATE_HIKE">🏦 利上げ (×1.05)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">説明文</label>
+                <input
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+                  placeholder="例: 今月は物価が上昇しています"
+                  value={weatherDesc}
+                  onChange={e => setWeatherDesc(e.target.value)}
+                />
+              </div>
+              {weatherMsg && <div className="text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">{weatherMsg}</div>}
+              <button
+                onClick={postWeather}
+                disabled={weatherPosting || !weatherDesc.trim()}
+                className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
+              >
+                {weatherPosting ? "設定中…" : "ウェザーを設定する"}
+              </button>
+            </div>
+          </div>
+
+          {/* 時事クイズ作成 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">🧠 時事クイズ作成</h2>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+              <div>
+                <label className="text-xs text-gray-500">問題文</label>
+                <textarea
+                  rows={2}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+                  placeholder="例: インフレとは何を意味しますか？"
+                  value={quizQuestion}
+                  onChange={e => setQuizQuestion(e.target.value)}
+                />
+              </div>
+              {quizOptions.map((opt, i) => (
+                <div key={i}>
+                  <label className="text-xs text-gray-500">
+                    選択肢 {i + 1} {quizCorrect === i && <span className="text-green-600">(正解)</span>}
+                  </label>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+                      value={opt}
+                      onChange={e => {
+                        const newOpts = [...quizOptions];
+                        newOpts[i] = e.target.value;
+                        setQuizOptions(newOpts);
+                      }}
+                    />
+                    <button
+                      onClick={() => setQuizCorrect(i)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border ${quizCorrect === i ? "bg-green-100 border-green-400 text-green-700" : "border-gray-200 text-gray-400"}`}
+                    >
+                      正解
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div>
+                <label className="text-xs text-gray-500">解説</label>
+                <textarea
+                  rows={2}
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+                  placeholder="正解後に表示される解説"
+                  value={quizExplain}
+                  onChange={e => setQuizExplain(e.target.value)}
+                />
+              </div>
+              {quizMsg && <div className="text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">{quizMsg}</div>}
+              <button
+                onClick={postQuiz}
+                disabled={quizPosting || !quizQuestion.trim() || quizOptions.some(o => !o.trim()) || !quizExplain.trim()}
+                className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
+              >
+                {quizPosting ? "作成中…" : "クイズを作成する"}
+              </button>
+            </div>
+          </div>
+
+          {/* ジュニア・ファンド管理 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">📈 ジュニア・ファンド管理</h2>
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
+              {fund && (
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="bg-indigo-50 rounded-xl p-3 text-center">
+                    <div className="text-xs text-indigo-500">評価額</div>
+                    <div className="text-base font-bold text-indigo-700 mt-0.5">{fund.currentValue.toLocaleString()}円</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <div className="text-xs text-gray-500">投資元本</div>
+                    <div className="text-base font-bold text-gray-700 mt-0.5">{fund.invested.toLocaleString()}円</div>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500">親マッチ率 (%)</label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+                    placeholder={`現在: ${fund?.parentMatchRate ?? 0}%`}
+                    value={fundMatchRate}
+                    onChange={e => setFundMatchRate(e.target.value)}
+                    min={0} max={200}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">年利 (%)</label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+                    placeholder={`現在: ${fund?.baseReturnRate ?? 5}%`}
+                    value={fundReturnRate}
+                    onChange={e => setFundReturnRate(e.target.value)}
+                    min={0} max={50}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={saveFundSettings}
+                className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-bold"
+              >
+                設定を保存
+              </button>
+              <div>
+                <label className="text-xs text-gray-500">親ボーナスを手動追加(円)</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="number"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+                    placeholder="例: 500"
+                    value={fundBonus}
+                    onChange={e => setFundBonus(e.target.value)}
+                    min={1}
+                  />
+                  <button
+                    onClick={addFundBonus}
+                    disabled={!fundBonus || Number(fundBonus) <= 0}
+                    className="bg-yellow-500 text-white rounded-xl px-4 text-sm font-bold disabled:opacity-40"
+                  >
+                    ボーナス
+                  </button>
+                </div>
+              </div>
+              {fundMsg && <div className="text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">{fundMsg}</div>}
             </div>
           </div>
 

@@ -12,6 +12,7 @@ import DarkWebPanel from "@/components/DarkWebPanel";
 import MissionInbox from "@/components/MissionInbox";
 import ChestBanner from "@/components/ChestBanner";
 import EvolutionCutin from "@/components/EvolutionCutin";
+import QuizBanner from "@/components/QuizBanner";
 
 interface OptisData {
   experience: number;
@@ -36,6 +37,8 @@ interface OptisData {
   activeLoan: { id: number; purpose: string; principal: number; monthlyPayment: number; months: number; paidMonths: number; remaining: number } | null;
   crystalCount: number;
   generation: number;
+  langMode: string;
+  hasQuizShield: boolean;
 }
 
 interface ActiveProject {
@@ -375,6 +378,9 @@ export default function OptisLabPage() {
 
       {/* 週宝箱 */}
       <ChestBanner onClaimed={fetchAll} />
+
+      {/* 時事クイズ・経済ウェザーバナー */}
+      <QuizBanner onAnswered={fetchAll} />
 
       {/* ミッション受信箱 */}
       <MissionInbox onChanged={fetchAll} />

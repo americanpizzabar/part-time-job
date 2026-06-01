@@ -3,13 +3,14 @@
 import { useState, useRef } from "react";
 import { today } from "@/lib/dateUtils";
 import { EXPENSE_CATEGORIES } from "@/lib/budget";
+import { ASSET_CATEGORIES, ASSET_META, AssetCategory } from "@/lib/optis";
 
 interface QuickAddModalProps {
   onClose: () => void;
   onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean }) => void;
 }
 
-type Step = "amount" | "sort" | "done";
+type Step = "amount" | "sort" | "asset" | "done";
 
 export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) {
   const [step, setStep] = useState<Step>("amount");
@@ -17,6 +18,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [dragX, setDragX] = useState(0);
   const [committed, setCommitted] = useState<"NEEDS" | "WANTS" | null>(null);
+  const [assetCategory, setAssetCategory] = useState<AssetCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -48,14 +50,23 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
     if (!dragging.current) return;
     dragging.current = false;
     const threshold = 70;
-    if (dragX <= -threshold) commit("NEEDS");
-    else if (dragX >= threshold) commit("WANTS");
+    if (dragX <= -threshold) selectTag("NEEDS");
+    else if (dragX >= threshold) selectTag("WANTS");
     else setDragX(0);
   }
 
-  async function commit(tag: "NEEDS" | "WANTS") {
-    if (saving) return;
+  function selectTag(tag: "NEEDS" | "WANTS") {
     setCommitted(tag);
+    if (tag === "NEEDS") {
+      // Show asset category step
+      setStep("asset");
+    } else {
+      commit(tag, null);
+    }
+  }
+
+  async function commit(tag: "NEEDS" | "WANTS", ac: AssetCategory | null) {
+    if (saving) return;
     setSaving(true);
     setStep("done");
     try {
@@ -67,6 +78,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           amount,
           category,
           needsWants: tag,
+          assetCategory: ac ?? undefined,
           date: today(),
           reportedAt: new Date().toISOString(),
         }),
@@ -89,7 +101,10 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
         {/* ヘッダー */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-bold text-gray-800">
-            {step === "amount" ? "いくら使った？" : step === "sort" ? "どっち？スワイプで仕分け" : "吸収中…"}
+            {step === "amount" ? "いくら使った？"
+              : step === "sort" ? "どっち？スワイプで仕分け"
+              : step === "asset" ? "どんな自己投資？"
+              : "吸収中…"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -177,6 +192,40 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           </div>
         )}
 
+        {/* STEP 2.5: 資産カテゴリ(Needsのみ) */}
+        {step === "asset" && (
+          <div className="p-5">
+            <div className="text-center text-sm text-gray-500 mb-4">どんな自己投資か選んでね（スキップも可）</div>
+            <div className="space-y-2">
+              {ASSET_CATEGORIES.map(ac => {
+                const meta = ASSET_META[ac];
+                return (
+                  <button
+                    key={ac}
+                    onClick={() => {
+                      setAssetCategory(ac);
+                      commit("NEEDS", ac);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 transition-colors text-left"
+                  >
+                    <span className="text-3xl">{meta.emoji}</span>
+                    <div>
+                      <div className="font-bold text-gray-800">{meta.label}</div>
+                      <div className="text-xs text-gray-500">{meta.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => commit("NEEDS", null)}
+              className="mt-3 w-full text-xs text-gray-400 py-2 hover:text-gray-600"
+            >
+              スキップ
+            </button>
+          </div>
+        )}
+
         {/* STEP 3: 吸収 */}
         {step === "done" && (
           <div className="p-10 flex flex-col items-center justify-center h-72">
@@ -188,6 +237,11 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
                 ¥{amount.toLocaleString()}
               </div>
             </div>
+            {assetCategory && (
+              <div className="text-sm text-gray-500 mt-2">
+                {ASSET_META[assetCategory].emoji} {ASSET_META[assetCategory].label}
+              </div>
+            )}
             <p className="text-sm text-gray-500 mt-4">Optisがエネルギーを吸収！</p>
           </div>
         )}

@@ -86,6 +86,7 @@ model Transaction {
   amount            Float
   category          String?  // 友達と遊ぶ, 文房具, 買い食い, 趣味, その他 (expense only)
   needsWants        String?  // NEEDS | WANTS (expense only)
+  assetCategory     String?  // STEM | ART_CULTURE | HEALTH_SOCIAL (NEEDS only)
   date              String   // "YYYY-MM-DD"
   reportedAt        DateTime? // ユーザー申告の時刻(放課後判定など)
   memo              String?
@@ -153,6 +154,7 @@ model OptisState {
   awakening        Int       @default(0) // Needs(自己投資)購入で蓄積する覚醒値
   gcoins           Int       @default(0) // ゲーム内仮想コイン(バンク/ショップ用)
   generation       Int       @default(1) // 転生(結晶化)回数 + 1
+  langMode         String    @default("JA") // 英語モード: JA | EN
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -334,4 +336,62 @@ model VirtualBankDeposit {
   interestEarned Int      @default(0)
   createdAt      DateTime @default(now())
   settledAt      DateTime?
+}
+
+// ─── 時事クイズ + 経済ウェザー ────────────────────────────────────────
+model EconomicWeather {
+  id          Int      @id @default(autoincrement())
+  type        String   // NEUTRAL | INFLATION | DEFLATION | YEN_STRONG | YEN_WEAK | RATE_HIKE
+  magnitude   Float    @default(1.0)
+  description String
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model NewsQuiz {
+  id           Int           @id @default(autoincrement())
+  question     String
+  options      String        // JSON array of 3 strings
+  correctIndex Int
+  explanation  String
+  weatherType  String        @default("NEUTRAL")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  attempts     QuizAttempt[]
+}
+
+model QuizAttempt {
+  id           Int      @id @default(autoincrement())
+  quiz         NewsQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId       Int
+  selectedIndex Int
+  correct      Boolean
+  shieldUntil  DateTime? // 正解時: now + 7日
+  expGained    Int      @default(0)
+  createdAt    DateTime @default(now())
+}
+
+// ─── 模擬インデックスファンド ──────────────────────────────────────────
+model IndexFund {
+  id             Int      @id @default(autoincrement())
+  invested       Int      @default(0)  // 累計投資額(円)
+  currentValue   Int      @default(0)  // 現在評価額(円)
+  parentMatchRate Int     @default(0)  // 親マッチ率(%)
+  baseReturnRate  Int     @default(5)  // 年利(%)
+  lastReturnAt   String?              // "YYYY-MM-DD" 最終リターン適用日
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  txs            IndexFundTx[]
+}
+
+model IndexFundTx {
+  id        Int       @id @default(autoincrement())
+  fund      IndexFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  fundId    Int
+  amount    Int
+  type      String    // INVEST | WITHDRAW | RETURN | PARENT_BONUS
+  date      String    // "YYYY-MM-DD"
+  memo      String?
+  createdAt DateTime  @default(now())
 }

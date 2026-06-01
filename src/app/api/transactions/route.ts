@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
-import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier } from "@/lib/optis";
+import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { type, amount, category, needsWants, date, memo, isPrivate, imageUrl, reportedAt } = body;
+  const { type, amount, category, needsWants, assetCategory, date, memo, isPrivate, imageUrl, reportedAt } = body;
 
   if (!type || amount === undefined || !date) {
     return NextResponse.json({ error: "type, amount, date are required" }, { status: 400 });
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
       amount: Number(amount),
       category: type === "EXPENSE" ? category ?? null : null,
       needsWants: type === "EXPENSE" ? needsWants ?? null : null,
+      assetCategory: (type === "EXPENSE" && needsWants === "NEEDS") ? assetCategory ?? null : null,
       date,
       reportedAt: reportedAt ? new Date(reportedAt) : new Date(),
       memo: memo ?? null,
@@ -83,6 +84,11 @@ export async function POST(req: Request) {
             }
           } catch { /* skip malformed */ }
         }
+      }
+
+      // 英語モード: EXP × 1.5
+      if (state.langMode === "EN") {
+        baseExp = Math.round(baseExp * EN_MODE_EXP_MULTIPLIER);
       }
 
       expGain = baseExp;
