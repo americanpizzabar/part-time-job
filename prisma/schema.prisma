@@ -20,6 +20,7 @@ model AggregationConfig {
   id             Int      @id @default(autoincrement())
   periodDays     Int      @default(7)
   startDayOfWeek Int      @default(1) // 0=Sun, 1=Mon
+  weeklyBudget   Int?     // 週予算(マイルストーン・チェスト判定用)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -86,6 +87,7 @@ model Transaction {
   category          String?  // 友達と遊ぶ, 文房具, 買い食い, 趣味, その他 (expense only)
   needsWants        String?  // NEEDS | WANTS (expense only)
   date              String   // "YYYY-MM-DD"
+  reportedAt        DateTime? // ユーザー申告の時刻(放課後判定など)
   memo              String?
   imageUrl          String?  // 食事の写真など (data URL)
   isPrivate         Boolean  @default(false) // 親に詳細を見せない
@@ -132,4 +134,48 @@ model PresentationRequest {
   createdAt     DateTime @default(now())
   respondedAt   DateTime?
   updatedAt     DateTime @updatedAt
+}
+
+// 電子生命体 Optis の状態(シングルトン: 1レコード運用)
+model OptisState {
+  id               Int       @id @default(autoincrement())
+  experience       Int       @default(0)
+  creditScore      Int       @default(50) // 0-100
+  theme            String    @default("normal") // normal | dark_web
+  equippedBody     String    @default("body_core")
+  equippedAura     String    @default("aura_basic")
+  equippedAccessory String?  // パーツID
+  unlockedParts    String    @default("[\"body_core\",\"aura_basic\"]") // JSON配列
+  lastSpinDate     String?   // 直近ルーレット日 "YYYY-MM-DD"
+  lastChestWeek    String?   // 直近チェスト受領週 "YYYY-MM-DD"(週開始日)
+  nmdDate          String?   // ノーマネーデー申告日 "YYYY-MM-DD"
+  freezeUntil      DateTime? // 凍結解除時刻(不正検知ペナルティ)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// ルーレット/チェストの報酬履歴
+model RewardLog {
+  id        Int      @id @default(autoincrement())
+  source    String   // ROULETTE | CHEST
+  rarity    String   // COMMON | UNCOMMON | RARE | LEGENDARY
+  rewardId  String   // パーツID or "exp:NNN"
+  label     String
+  date      String   // "YYYY-MM-DD"
+  createdAt DateTime @default(now())
+}
+
+// 親子連動シークレット・ミッション
+model Mission {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  rewardType  String    // CASH | PART
+  rewardCash  Int?      // 現金報酬(円)
+  rewardPart  String?   // パーツID
+  status      String    @default("SENT") // SENT | CLEARED | APPROVED | REJECTED
+  createdAt   DateTime  @default(now())
+  clearedAt   DateTime?
+  approvedAt  DateTime?
+  updatedAt   DateTime  @updatedAt
 }

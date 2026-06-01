@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   if (aggregation) {
-    const { periodDays, startDayOfWeek } = aggregation;
+    const { periodDays, startDayOfWeek, weeklyBudget } = aggregation;
     const existing = await prisma.aggregationConfig.findFirst();
     const config = existing
       ? await prisma.aggregationConfig.update({
@@ -37,12 +37,16 @@ export async function POST(req: Request) {
           data: {
             ...(periodDays !== undefined && { periodDays: Number(periodDays) }),
             ...(startDayOfWeek !== undefined && { startDayOfWeek: Number(startDayOfWeek) }),
+            ...(weeklyBudget !== undefined && {
+              weeklyBudget: weeklyBudget === null || weeklyBudget === "" ? null : Number(weeklyBudget),
+            }),
           },
         })
       : await prisma.aggregationConfig.create({
           data: {
             periodDays: Number(periodDays ?? 7),
             startDayOfWeek: Number(startDayOfWeek ?? 1),
+            weeklyBudget: weeklyBudget ? Number(weeklyBudget) : null,
           },
         });
     results.aggregation = config;
