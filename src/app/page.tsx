@@ -307,15 +307,23 @@ export default function OptisLabPage() {
         </div>
       </div>
 
-      {/* お手伝いへの導線 */}
-      <Link href="/tasks" className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300">
-        <span className="text-2xl">🧹</span>
-        <div className="flex-1">
-          <div className="font-medium text-gray-800">お手伝いカレンダー</div>
-          <div className="text-xs text-gray-500">チェックしてお小遣いを稼ごう</div>
-        </div>
-        <span className="text-gray-300">›</span>
-      </Link>
+      {/* 導線 */}
+      <div className="grid grid-cols-2 gap-2">
+        <Link href="/tasks" className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 hover:border-blue-300">
+          <span className="text-2xl">🧹</span>
+          <div className="min-w-0">
+            <div className="font-medium text-gray-800 text-sm">お手伝い</div>
+            <div className="text-[11px] text-gray-500">稼ぐ</div>
+          </div>
+        </Link>
+        <Link href="/collection" className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 hover:border-blue-300">
+          <span className="text-2xl">📒</span>
+          <div className="min-w-0">
+            <div className="font-medium text-gray-800 text-sm">パーツ図鑑</div>
+            <div className="text-[11px] text-gray-500">集める・装備</div>
+          </div>
+        </Link>
+      </div>
 
       {/* 浮遊入力ボタン */}
       <button
