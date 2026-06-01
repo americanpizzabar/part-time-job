@@ -10,6 +10,7 @@ import RouletteModal from "@/components/RouletteModal";
 import DarkWebPanel from "@/components/DarkWebPanel";
 import MissionInbox from "@/components/MissionInbox";
 import ChestBanner from "@/components/ChestBanner";
+import EvolutionCutin from "@/components/EvolutionCutin";
 
 interface OptisData {
   experience: number;
@@ -45,8 +46,27 @@ export default function OptisLabPage() {
   const [darkWeb, setDarkWeb] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [nmdAsk, setNmdAsk] = useState(false);
+  const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevEvoRef = useRef<{ form: OptisForm; stage: 1 | 2 | 3 } | null>(null);
+  const evoActiveRef = useRef(false);
+  const pendingRouletteRef = useRef(false);
+
+  // 進化/変身の検知(前回の形態・ステージと比較)
+  const detectEvo = useCallback((o: OptisData) => {
+    const cur = { form: o.form, stage: o.stage };
+    let prev = prevEvoRef.current;
+    if (!prev) {
+      try { prev = JSON.parse(localStorage.getItem("optis-evo") || "null"); } catch { prev = null; }
+    }
+    if (prev && (prev.stage !== cur.stage || prev.form !== cur.form)) {
+      setEvolution({ fromForm: prev.form, fromStage: prev.stage, toForm: cur.form, toStage: cur.stage });
+      evoActiveRef.current = true;
+    }
+    prevEvoRef.current = cur;
+    localStorage.setItem("optis-evo", JSON.stringify(cur));
+  }, []);
 
   const fetchAll = useCallback(async () => {
     const [o, b, goals] = await Promise.all([
@@ -58,8 +78,9 @@ export default function OptisLabPage() {
     setBalance(b);
     const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
     setTopGoal(active.length > 0 ? active[0] : null);
+    detectEvo(o as OptisData);
     return o as OptisData;
-  }, []);
+  }, [detectEvo]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -129,9 +150,22 @@ export default function OptisLabPage() {
       setTimeout(() => setExpPop(null), 1100);
     }
     const fresh = await fetchAll();
-    // 本日初回ならルーレット起動
+    // 本日初回ならルーレット起動(進化カットイン中は閉じてから)
     if (!fresh.spunToday && !fresh.frozen) {
-      setTimeout(() => setShowRoulette(true), 400);
+      if (evoActiveRef.current) {
+        pendingRouletteRef.current = true;
+      } else {
+        setTimeout(() => setShowRoulette(true), 400);
+      }
+    }
+  }
+
+  function closeEvolution() {
+    setEvolution(null);
+    evoActiveRef.current = false;
+    if (pendingRouletteRef.current) {
+      pendingRouletteRef.current = false;
+      setTimeout(() => setShowRoulette(true), 300);
     }
   }
 
@@ -297,6 +331,19 @@ export default function OptisLabPage() {
 
       {showAdd && <QuickAddModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
       {showRoulette && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}
+
+      {/* 進化・変身カットイン */}
+      {evolution && (
+        <EvolutionCutin
+          fromForm={evolution.fromForm}
+          fromStage={evolution.fromStage}
+          toForm={evolution.toForm}
+          toStage={evolution.toStage}
+          auraId={optis.equippedAura}
+          accessoryId={optis.equippedAccessory}
+          onClose={closeEvolution}
+        />
+      )}
 
       {/* NMDダイアログ */}
       {nmdAsk && (
