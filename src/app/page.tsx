@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { formatJPY } from "@/lib/dateUtils";
 import { OptisForm, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour } from "@/lib/optis";
+import { playExpGain, playNmdClaim } from "@/lib/sound";
 import OptisCreature from "@/components/OptisCreature";
 import QuickAddModal from "@/components/QuickAddModal";
 import RouletteModal from "@/components/RouletteModal";
@@ -147,6 +148,7 @@ export default function OptisLabPage() {
     setShowAdd(false);
     if (info.expGain > 0) {
       setExpPop(info.expGain);
+      playExpGain();
       setTimeout(() => setExpPop(null), 1100);
     }
     const fresh = await fetchAll();
@@ -177,7 +179,10 @@ export default function OptisLabPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ noSpending }),
     });
-    if (noSpending) triggerAnim("optis-jump", "ノーマネーデー達成！ルーレット確変だ⚡");
+    if (noSpending) {
+      playNmdClaim();
+      triggerAnim("optis-jump", "ノーマネーデー達成！ルーレット確変だ⚡");
+    }
     fetchAll();
   }
 

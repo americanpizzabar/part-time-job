@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RARITY_META, Rarity } from "@/lib/optis";
 import Confetti from "@/components/Confetti";
+import { playRouletteSpin, playRarityReveal } from "@/lib/sound";
 
 interface SpinResult {
   rarity: Rarity;
@@ -36,6 +37,7 @@ export default function RouletteModal({ onClose, onDone }: RouletteModalProps) {
     if (started.current) return;
     started.current = true;
     (async () => {
+      playRouletteSpin();
       const res = await fetch("/api/optis/spin", { method: "POST" });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -47,6 +49,7 @@ export default function RouletteModal({ onClose, onDone }: RouletteModalProps) {
       setResult(data);
       setTimeout(() => {
         setPhase("result");
+        playRarityReveal(data.rarity);
         onDone?.();
       }, 3000);
     })();

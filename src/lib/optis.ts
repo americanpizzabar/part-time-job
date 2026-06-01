@@ -127,18 +127,29 @@ export interface Part {
   rarity: Rarity;
   color: string; // 発光/表示色
   emoji?: string;
+  seasonal?: boolean; // 季節/期間限定
 }
 
 export const PARTS: Part[] = [
+  // ── COMMON ─────────────────────────────────────────────────────────────────
   { id: "body_core", type: "body", name: "コア・ボディ", rarity: "COMMON", color: "#64748b" },
   { id: "aura_basic", type: "aura", name: "ベーシック・オーラ", rarity: "COMMON", color: "#94a3b8" },
+  // ── UNCOMMON ───────────────────────────────────────────────────────────────
   { id: "aura_cyan", type: "aura", name: "ネオンシアン・オーラ", rarity: "UNCOMMON", color: "#06b6d4" },
   { id: "aura_magenta", type: "aura", name: "マゼンタ・オーラ", rarity: "UNCOMMON", color: "#ec4899" },
-  { id: "aura_gold", type: "aura", name: "ゴールド・オーラ", rarity: "RARE", color: "#f59e0b" },
-  { id: "aura_rainbow", type: "aura", name: "プリズム・オーラ", rarity: "LEGENDARY", color: "#a855f7", emoji: "🌈" },
+  { id: "aura_summer", type: "aura", name: "サマーウェーブ・オーラ", rarity: "UNCOMMON", color: "#0ea5e9", emoji: "🌊", seasonal: true },
   { id: "acc_cap", type: "accessory", name: "ストリートキャップ", rarity: "UNCOMMON", color: "#ef4444", emoji: "🧢" },
+  { id: "acc_sunglasses", type: "accessory", name: "サマーサングラス", rarity: "UNCOMMON", color: "#fbbf24", emoji: "😎", seasonal: true },
+  // ── RARE ───────────────────────────────────────────────────────────────────
+  { id: "aura_gold", type: "aura", name: "ゴールド・オーラ", rarity: "RARE", color: "#f59e0b" },
+  { id: "aura_sakura", type: "aura", name: "桜吹雪オーラ", rarity: "RARE", color: "#f9a8d4", emoji: "🌸", seasonal: true },
+  { id: "aura_autumn", type: "aura", name: "オータム・グロウ・オーラ", rarity: "RARE", color: "#ea580c", emoji: "🍂", seasonal: true },
+  { id: "aura_snow", type: "aura", name: "スノウフレーク・オーラ", rarity: "RARE", color: "#bae6fd", emoji: "❄️", seasonal: true },
   { id: "acc_glasses", type: "accessory", name: "サイバーゴーグル", rarity: "RARE", color: "#0ea5e9", emoji: "🕶️" },
   { id: "acc_crown", type: "accessory", name: "クリスタル・クラウン", rarity: "RARE", color: "#22d3ee", emoji: "👑" },
+  { id: "acc_santa", type: "accessory", name: "サンタハット", rarity: "RARE", color: "#dc2626", emoji: "🎅", seasonal: true },
+  // ── LEGENDARY ──────────────────────────────────────────────────────────────
+  { id: "aura_rainbow", type: "aura", name: "プリズム・オーラ", rarity: "LEGENDARY", color: "#a855f7", emoji: "🌈" },
   { id: "acc_halo", type: "accessory", name: "レジェンド・ヘイロー", rarity: "LEGENDARY", color: "#fde047", emoji: "💫" },
 ];
 

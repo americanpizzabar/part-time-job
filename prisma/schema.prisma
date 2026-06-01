@@ -165,6 +165,16 @@ model RewardLog {
   createdAt DateTime @default(now())
 }
 
+// 装備セット（コーデ）保存
+model OutfitSet {
+  id                Int      @id @default(autoincrement())
+  name              String
+  equippedBody      String
+  equippedAura      String
+  equippedAccessory String?
+  createdAt         DateTime @default(now())
+}
+
 // 親子連動シークレット・ミッション
 model Mission {
   id          Int       @id @default(autoincrement())

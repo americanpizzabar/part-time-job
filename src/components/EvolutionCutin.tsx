@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { OptisForm, FORM_META, STAGE_LABEL } from "@/lib/optis";
 import OptisCreature from "@/components/OptisCreature";
 import Confetti from "@/components/Confetti";
+import { playEvolution, playEvolutionFanfare } from "@/lib/sound";
 
 interface EvolutionCutinProps {
   fromForm: OptisForm;
@@ -29,7 +30,11 @@ export default function EvolutionCutin({
   const meta = FORM_META[toForm];
 
   useEffect(() => {
-    const t = setTimeout(() => setPhase("after"), 850);
+    playEvolution();
+    const t = setTimeout(() => {
+      setPhase("after");
+      playEvolutionFanfare();
+    }, 850);
     return () => clearTimeout(t);
   }, []);
 
