@@ -122,6 +122,15 @@ export default function ParentPage() {
   const [fundReturnRate, setFundReturnRate] = useState("");
   const [fundBonus, setFundBonus] = useState("");
   const [fundMsg, setFundMsg] = useState("");
+  const [keywords, setKeywords] = useState<{id:number;word:string;english?:string;emoji:string;date:string}[]>([]);
+  const [kwWord, setKwWord] = useState("");
+  const [kwEnglish, setKwEnglish] = useState("");
+  const [kwEmoji, setKwEmoji] = useState("💡");
+  const [kwGradient, setKwGradient] = useState("economy");
+  const [kwBody, setKwBody] = useState("");
+  const [kwDate, setKwDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [kwPosting, setKwPosting] = useState(false);
+  const [kwMsg, setKwMsg] = useState("");
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
@@ -145,12 +154,18 @@ export default function ParentPage() {
       setOutcomeReports((outs as OutcomeReport[]).filter(o => o.status === "PENDING"));
       setLoans((ls as FamilyLoan[]).filter(loan => loan.status === "PENDING" || loan.status === "ACTIVE"));
       setFund(fd);
+      // キーワードも取得(全日付)
+      fetch("/api/keyword/all").then(r => r.json()).then(setKeywords).catch(() => {});
     } finally {
       setLoading(false);
     }
   }, [start, end]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    // 親セッションをマーク: ホーム画面でキーワードタップ時のポイント付与を抑制
+    sessionStorage.setItem("parentSession", "1");
+  }, [fetchData]);
 
   async function respond(p: Presentation, status: string) {
     await fetch(`/api/presentations/${p.id}`, {
@@ -288,6 +303,24 @@ export default function ParentPage() {
       });
     }
     fetchData();
+  }
+
+  async function postKeyword() {
+    if (!kwWord || !kwBody || !kwDate) return;
+    setKwPosting(true);
+    setKwMsg("");
+    try {
+      await fetch("/api/keyword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: kwWord, english: kwEnglish || undefined, emoji: kwEmoji, gradient: kwGradient, body: kwBody, date: kwDate }),
+      });
+      setKwWord(""); setKwEnglish(""); setKwBody(""); setKwEmoji("💡");
+      setKwMsg("登録しました");
+      fetch("/api/keyword/all").then(r => r.json()).then(setKeywords).catch(() => {});
+    } finally {
+      setKwPosting(false);
+    }
   }
 
   const pending = presentations.filter(p => p.status === "PENDING" || p.status === "HOLD");
@@ -888,6 +921,47 @@ export default function ParentPage() {
                         </button>
                       )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ─── 1日1キーワード管理 ─── */}
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <h2 className="font-bold text-gray-800 mb-3">📡 1日1キーワード管理</h2>
+            <p className="text-xs text-gray-400 mb-3">※ ここで登録しても知性ポイントは加算されません。子供がホーム画面でタップした時のみ付与されます。</p>
+            <div className="space-y-2 mb-3">
+              <div className="flex gap-2">
+                <input value={kwWord} onChange={e => setKwWord(e.target.value)} placeholder="キーワード (例: 円安)" className="flex-1 border rounded-lg px-3 py-2 text-sm" />
+                <input value={kwEnglish} onChange={e => setKwEnglish(e.target.value)} placeholder="英語 (任意)" className="w-32 border rounded-lg px-3 py-2 text-sm" />
+                <input value={kwEmoji} onChange={e => setKwEmoji(e.target.value)} placeholder="絵文字" className="w-16 border rounded-lg px-3 py-2 text-sm text-center" />
+              </div>
+              <div className="flex gap-2">
+                <select value={kwGradient} onChange={e => setKwGradient(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+                  <option value="economy">経済(青)</option>
+                  <option value="tech">テック(紫)</option>
+                  <option value="global">環境(緑)</option>
+                  <option value="cyber">サイバー(赤黒)</option>
+                  <option value="social">社会(鉄紺)</option>
+                </select>
+                <input type="date" value={kwDate} onChange={e => setKwDate(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <textarea value={kwBody} onChange={e => setKwBody(e.target.value)} placeholder="「ヤバさ」の説明 (1〜2行)" rows={2} className="w-full border rounded-lg px-3 py-2 text-sm" />
+              <button onClick={postKeyword} disabled={kwPosting || !kwWord || !kwBody} className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-40">
+                {kwPosting ? "登録中…" : "キーワードを登録"}
+              </button>
+              {kwMsg && <p className="text-green-600 text-xs text-center">{kwMsg}</p>}
+            </div>
+            {keywords.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 font-medium">登録済みキーワード ({keywords.length}件)</p>
+                {keywords.slice(0, 5).map(kw => (
+                  <div key={kw.id} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-1.5">
+                    <span>{kw.emoji}</span>
+                    <span className="font-medium">{kw.word}</span>
+                    {kw.english && <span className="text-gray-400 text-xs">{kw.english}</span>}
+                    <span className="ml-auto text-xs text-gray-400">{kw.date}</span>
                   </div>
                 ))}
               </div>

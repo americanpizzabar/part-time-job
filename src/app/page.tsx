@@ -303,8 +303,11 @@ export default function OptisLabPage() {
           onClick={async () => {
             localStorage.setItem("kw-" + keyword.id, "1");
             setKeyword(null);
-            await fetch("/api/keyword/tap", { method: "POST" });
-            fetchAll(); // refresh wisdomPoints
+            // 親セッション中はポイントを付与しない
+            if (!sessionStorage.getItem("parentSession")) {
+              await fetch("/api/keyword/tap", { method: "POST" });
+              fetchAll(); // refresh wisdomPoints
+            }
           }}
         >
           <div className="text-center px-8 select-none">
