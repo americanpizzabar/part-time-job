@@ -133,6 +133,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [fundWithdrawAmt, setFundWithdrawAmt] = useState("");
   const [fundMsg, setFundMsg] = useState("");
   const [langMsg, setLangMsg] = useState("");
+  const [missions, setMissions] = useState<{id:number;word:string;translation:string;choices:string[];correctIndex:number;hint:string;expReward:number;isActive:boolean;solvedAt:string|null}[]>([]);
+  const [missionResult, setMissionResult] = useState<{id:number;correct:boolean;word:string;translation:string} | null>(null);
 
   const load = () => {
     fetch("/api/optis").then(r => r.json()).then(setState);
@@ -144,6 +146,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/career").then(r => r.json()).then(setCareer);
     fetch("/api/fund").then(r => r.json()).then(setFund);
     fetch("/api/quiz").then(r => r.json()).then(setQuizStatus);
+    fetch("/api/wordmission").then(r => r.json()).then(setMissions).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -900,6 +903,63 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                     <div className="text-cyan-200 text-lg">{v}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* ワン・ワード・ミッション */}
+              <div className="mt-4 pt-3 border-t border-cyan-900/40">
+                <div className="text-xs text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <span>🔤</span> WORD MISSION
+                </div>
+                {missions.filter(m => !m.solvedAt).slice(0, 1).map(mission => (
+                  <div key={mission.id} className="bg-gray-800 rounded-xl p-3">
+                    <div className="text-gray-400 text-xs mb-2">{mission.hint}</div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-white/40 text-sm font-mono">{"◯".repeat(mission.word.length)}</span>
+                      <span className="text-gray-500 text-xs">= {mission.translation}</span>
+                      <span className="ml-auto text-yellow-400 text-xs">+{mission.expReward} EXP</span>
+                    </div>
+                    {missionResult?.id === mission.id ? (
+                      <div className={`text-center py-2 rounded-lg text-sm font-bold ${missionResult.correct ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+                        {missionResult.correct ? `✅ ${missionResult.word} (${missionResult.translation}) — 正解！` : `❌ 不正解。もう一度考えてみろ。`}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(mission.choices as string[]).map((choice, i) => (
+                          <button
+                            key={i}
+                            onClick={async () => {
+                              const res = await fetch(`/api/wordmission/${mission.id}`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ selectedIndex: i }),
+                              });
+                              const data = await res.json();
+                              setMissionResult({ id: mission.id, correct: data.correct, word: data.word, translation: data.translation });
+                              if (data.correct) {
+                                setTimeout(() => {
+                                  setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, solvedAt: new Date().toISOString() } : m));
+                                  setMissionResult(null);
+                                  onChanged?.();
+                                }, 1800);
+                              }
+                            }}
+                            className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-mono py-2 px-1 rounded-lg transition-colors"
+                          >
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {missions.filter(m => m.solvedAt).length > 0 && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    ✅ 解除済み: {missions.filter(m => m.solvedAt).map(m => m.word).join(", ")}
+                  </div>
+                )}
+                {missions.filter(m => !m.solvedAt).length === 0 && missions.length > 0 && (
+                  <div className="text-center py-3 text-green-400 text-sm">🏆 全ミッション解除済み</div>
+                )}
               </div>
 
               {/* EN mode toggle */}

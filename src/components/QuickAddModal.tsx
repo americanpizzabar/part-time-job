@@ -7,7 +7,7 @@ import { ASSET_CATEGORIES, ASSET_META, AssetCategory } from "@/lib/optis";
 
 interface QuickAddModalProps {
   onClose: () => void;
-  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean }) => void;
+  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean; careerFeedback?: string | null }) => void;
 }
 
 type Step = "amount" | "sort" | "asset" | "done";
@@ -20,6 +20,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [committed, setCommitted] = useState<"NEEDS" | "WANTS" | null>(null);
   const [assetCategory, setAssetCategory] = useState<AssetCategory | null>(null);
   const [saving, setSaving] = useState(false);
+  const [careerFeedback, setCareerFeedback] = useState<string | null>(null);
   const dragging = useRef(false);
   const startX = useRef(0);
 
@@ -84,10 +85,11 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
         }),
       });
       const data = await res.json().catch(() => ({ expGain: 0 }));
+      if (data.careerFeedback) setCareerFeedback(data.careerFeedback);
       // 吸収アニメーションを見せてから閉じる
       setTimeout(() => {
-        onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false });
-      }, 700);
+        onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false, careerFeedback: data.careerFeedback });
+      }, data.careerFeedback ? 2200 : 700);
     } finally {
       setSaving(false);
     }
@@ -104,7 +106,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
             {step === "amount" ? "いくら使った？"
               : step === "sort" ? "どっち？スワイプで仕分け"
               : step === "asset" ? "どんな自己投資？"
-              : "吸収中…"}
+              : step === "done" && careerFeedback ? "AIが分析中…" : "吸収中…"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -243,6 +245,15 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
               </div>
             )}
             <p className="text-sm text-gray-500 mt-4">Optisがエネルギーを吸収！</p>
+          </div>
+        )}
+        {step === "done" && careerFeedback && (
+          <div className="p-5 text-center animate-fade-in">
+            <div className="text-3xl mb-3">🧠</div>
+            <div className="text-sm text-gray-500 mb-2 font-medium">Optisからの分析</div>
+            <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-4 text-gray-800 text-sm leading-relaxed font-medium border border-purple-100">
+              {careerFeedback}
+            </div>
           </div>
         )}
       </div>

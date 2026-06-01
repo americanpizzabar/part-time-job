@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
 import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER } from "@/lib/optis";
+import { generateCareerFeedback } from "@/lib/careerFeedback";
 
 export const dynamic = "force-dynamic";
 
@@ -103,8 +104,25 @@ export async function POST(req: Request) {
     }
   }
 
+  let careerFeedback: string | null = null;
+  if (type === "EXPENSE" && needsWants === "NEEDS" && assetCategory) {
+    // Fetch last 90 days career totals for feedback generation
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+    const sinceStr = since.toISOString().slice(0, 10);
+    const needsTxs = await prisma.transaction.findMany({
+      where: { type: "EXPENSE", needsWants: "NEEDS", date: { gte: sinceStr }, assetCategory: { not: null } },
+      select: { assetCategory: true, amount: true },
+    });
+    const stemTotal = needsTxs.filter(t => t.assetCategory === "STEM").reduce((s, t) => s + t.amount, 0);
+    const artTotal = needsTxs.filter(t => t.assetCategory === "ART_CULTURE").reduce((s, t) => s + t.amount, 0);
+    const healthTotal = needsTxs.filter(t => t.assetCategory === "HEALTH_SOCIAL").reduce((s, t) => s + t.amount, 0);
+    const totalNeeds = needsTxs.reduce((s, t) => s + t.amount, 0);
+    careerFeedback = generateCareerFeedback({ stemTotal, artTotal, healthTotal, totalNeeds, assetCategory });
+  }
+
   return NextResponse.json(
-    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter, feedBoostApplied },
+    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter, feedBoostApplied, careerFeedback },
     { status: 201 }
   );
 }

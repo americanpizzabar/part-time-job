@@ -51,6 +51,7 @@ export async function GET() {
   return NextResponse.json({
     id: state.id,
     experience: state.experience,
+    wisdomPoints: state.wisdomPoints,
     creditScore: state.creditScore,
     theme: state.theme,
     equippedBody: state.equippedBody,

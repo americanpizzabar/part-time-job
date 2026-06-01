@@ -155,6 +155,7 @@ model OptisState {
   gcoins           Int       @default(0) // ゲーム内仮想コイン(バンク/ショップ用)
   generation       Int       @default(1) // 転生(結晶化)回数 + 1
   langMode         String    @default("JA") // 英語モード: JA | EN
+  wisdomPoints     Int       @default(0) // 知性ポイント
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -394,4 +395,31 @@ model IndexFundTx {
   date      String    // "YYYY-MM-DD"
   memo      String?
   createdAt DateTime  @default(now())
+}
+
+// ─── 1日1キーワード(知性フラッシュ) ──────────────────────────────────
+model DailyKeyword {
+  id        Int      @id @default(autoincrement())
+  word      String   // "円安"
+  ruby      String?  // "えんやす"
+  english   String?  // "Yen Depreciation"
+  emoji     String   @default("💡")
+  gradient  String   @default("economy") // economy|tech|global|cyber|social
+  body      String   // "1ドル=160円時代。輸入品が値上がりし、家計に直撃。"
+  date      String   // "YYYY-MM-DD" 表示予定日
+  createdAt DateTime @default(now())
+}
+
+// ─── ワン・ワード・ミッション(英語パズル) ────────────────────────────
+model WordMission {
+  id           Int       @id @default(autoincrement())
+  word         String    // "Budget"
+  translation  String    // "予算"
+  choices      Json      // ["Budget","Target","Balance"]
+  correctIndex Int
+  hint         String    // "暗号が解除されると◯◯◯◯◯が受け取れる"
+  expReward    Int       @default(30)
+  isActive     Boolean   @default(true)
+  solvedAt     DateTime?
+  createdAt    DateTime  @default(now())
 }

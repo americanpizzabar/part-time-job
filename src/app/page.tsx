@@ -16,6 +16,7 @@ import QuizBanner from "@/components/QuizBanner";
 
 interface OptisData {
   experience: number;
+  wisdomPoints: number;
   creditScore: number;
   equippedAura: string;
   equippedAccessory: string | null;
@@ -53,8 +54,17 @@ interface ActiveProject {
 interface Balance { wallet: number; free: number; saved: number; }
 interface GoalSummary { id: number; name: string; progress: number; saved: number; targetAmount: number; remaining: number; isAchieved: boolean; }
 
+const KEYWORD_GRADIENT: Record<string, string> = {
+  economy: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+  tech:    "linear-gradient(135deg, #0d0d0d 0%, #1a0533 50%, #2d1b69 100%)",
+  global:  "linear-gradient(135deg, #004d40 0%, #00695c 50%, #00796b 100%)",
+  cyber:   "linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 40%, #e94560 100%)",
+  social:  "linear-gradient(135deg, #1b2838 0%, #2a475e 50%, #1b2838 100%)",
+};
+
 export default function OptisLabPage() {
   const [optis, setOptis] = useState<OptisData | null>(null);
+  const [keyword, setKeyword] = useState<{id:number;word:string;ruby?:string;english?:string;emoji:string;gradient:string;body:string} | null>(null);
   const [balance, setBalance] = useState<Balance | null>(null);
   const [topGoal, setTopGoal] = useState<GoalSummary | null>(null);
   const [activeProject, setActiveProject] = useState<ActiveProject | null>(null);
@@ -114,7 +124,20 @@ export default function OptisLabPage() {
     return o as OptisData;
   }, [detectEvo]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll();
+    // Fetch today's keyword
+    fetch("/api/keyword")
+      .then(r => r.json())
+      .then((kws: {id:number;word:string;ruby?:string;english?:string;emoji:string;gradient:string;body:string}[]) => {
+        if (kws.length > 0) {
+          const kw = kws[0];
+          if (!localStorage.getItem("kw-" + kw.id)) {
+            setKeyword(kw);
+          }
+        }
+      });
+  }, [fetchAll]);
 
   // NMDダイアログ: 21時以降、当日未回答なら1回表示
   useEffect(() => {
@@ -175,7 +198,7 @@ export default function OptisLabPage() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
   }
 
-  async function handleSaved(info: { expGain: number; awakened?: boolean }) {
+  async function handleSaved(info: { expGain: number; awakened?: boolean; careerFeedback?: string | null }) {
     setShowAdd(false);
     if (info.expGain > 0) {
       setExpPop(info.expGain);
@@ -273,6 +296,42 @@ export default function OptisLabPage() {
 
   return (
     <div className="space-y-4 relative">
+      {keyword && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center cursor-pointer"
+          style={{ background: KEYWORD_GRADIENT[keyword.gradient as keyof typeof KEYWORD_GRADIENT] || KEYWORD_GRADIENT.economy }}
+          onClick={async () => {
+            localStorage.setItem("kw-" + keyword.id, "1");
+            setKeyword(null);
+            await fetch("/api/keyword/tap", { method: "POST" });
+            fetchAll(); // refresh wisdomPoints
+          }}
+        >
+          <div className="text-center px-8 select-none">
+            <div className="text-7xl mb-4">{keyword.emoji}</div>
+            {keyword.ruby && <div className="text-white/60 text-sm mb-1 tracking-widest">{keyword.ruby}</div>}
+            <div className="text-white font-black text-5xl sm:text-7xl mb-3 drop-shadow-lg tracking-tight">
+              {keyword.word}
+            </div>
+            {keyword.english && (
+              <div className="text-white/70 text-lg font-mono mb-6 tracking-wider uppercase">{keyword.english}</div>
+            )}
+            <div className="text-white/90 text-base max-w-xs mx-auto leading-relaxed mb-8">
+              {keyword.body}
+            </div>
+            <div className="inline-flex items-center gap-2 bg-white/20 rounded-full px-5 py-2 text-white text-sm font-medium backdrop-blur-sm">
+              <span>タップして閉じる</span>
+              <span className="text-yellow-300 font-bold">+5 知性pt</span>
+            </div>
+          </div>
+          <div className="absolute bottom-8 left-0 right-0 flex justify-center">
+            <div className="flex gap-1">
+              {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" style={{animationDelay:`${i*0.3}s`}} />)}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* グリッチ遷移フラッシュ */}
       {glitch && <div className="fixed inset-0 z-[80] bg-cyan-400 glitch-flash pointer-events-none" />}
 
