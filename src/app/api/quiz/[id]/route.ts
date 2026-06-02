@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
 import { QUIZ_SHIELD_DAYS, QUIZ_CORRECT_EXP } from "@/lib/optis";
+import { getOrCreateLearningProfile, calibrateAfterAnswer, LAYER_UP_DIALOGUE, LAYER_DOWN_DIALOGUE } from "@/lib/learningEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const body = await req.json();
-  const { selectedIndex } = body as { selectedIndex: number };
+  const { selectedIndex, responseMs } = body as { selectedIndex: number; responseMs?: number };
 
   const quiz = await prisma.newsQuiz.findUnique({ where: { id: quizId } });
   if (!quiz) {
@@ -36,6 +37,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   }
 
+  const profile = await getOrCreateLearningProfile();
+
   await prisma.quizAttempt.create({
     data: {
       quizId,
@@ -43,13 +46,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       correct,
       shieldUntil,
       expGained,
+      responseMs: responseMs ?? null,
+      layer: profile.layer,
     },
   });
+
+  const calibration = await calibrateAfterAnswer(
+    profile.id, profile.layer, profile.encounterRate,
+    responseMs ?? null, correct, profile.parentAlertAt,
+  );
+
+  let layerDialogue: string | null = null;
+  if (calibration.layerChanged) {
+    if (calibration.newLayer > profile.layer) {
+      layerDialogue = LAYER_UP_DIALOGUE[calibration.newLayer] ?? null;
+    } else {
+      layerDialogue = LAYER_DOWN_DIALOGUE;
+    }
+  }
 
   return NextResponse.json({
     correct,
     explanation: quiz.explanation,
     shieldUntil,
     expGained,
+    layerChanged: calibration.layerChanged,
+    newLayer: calibration.newLayer,
+    layerDialogue,
+    accuracy: calibration.accuracy,
   });
 }

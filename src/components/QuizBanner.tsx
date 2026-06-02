@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { WEATHER_META, WeatherType } from "@/lib/optis";
 
 interface QuizData {
@@ -22,6 +22,8 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [result, setResult] = useState<{ correct: boolean; explanation: string; expGained: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [layerUpMsg, setLayerUpMsg] = useState<string | null>(null);
+  const startTime = useRef<number>(Date.now());
 
   useEffect(() => {
     fetch("/api/quiz")
@@ -45,7 +47,7 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
       const r = await fetch(`/api/quiz/${quiz.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedIndex: idx }),
+        body: JSON.stringify({ selectedIndex: idx, responseMs: Date.now() - startTime.current }),
       });
       const data = await r.json();
       setResult({
@@ -53,6 +55,10 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
         explanation: data.explanation,
         expGained: data.expGained ?? 0,
       });
+      if (data.layerChanged && data.layerDialogue) {
+        const layerLabel = data.newLayer !== undefined ? `⬆️ Layer ${data.newLayer}` : "";
+        setLayerUpMsg(layerLabel ? `${layerLabel} — ${data.layerDialogue}` : data.layerDialogue);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -62,6 +68,7 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
     setShowModal(false);
     setResult(null);
     setSelectedIndex(null);
+    setLayerUpMsg(null);
     if (result?.correct) {
       setHasShield(true);
       onAnswered();
@@ -72,7 +79,7 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
     <>
       {/* Banner */}
       <button
-        onClick={() => setShowModal(true)}
+        onClick={() => { startTime.current = Date.now(); setShowModal(true); }}
         className="w-full flex items-center gap-3 bg-red-950/80 border border-red-500/60 rounded-xl px-4 py-3 text-left animate-pulse hover:animate-none hover:border-red-400 transition-colors"
       >
         <span className="text-2xl">{weatherMeta.emoji}</span>
@@ -131,6 +138,11 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
                     )}
                     <div className="text-gray-300 text-sm leading-relaxed">{result.explanation}</div>
                   </div>
+                  {layerUpMsg && (
+                    <div className="rounded-xl p-4 border bg-purple-900/40 border-purple-500/60">
+                      <div className="text-purple-200 text-sm font-medium leading-relaxed">{layerUpMsg}</div>
+                    </div>
+                  )}
                   <button
                     onClick={closeModal}
                     className="w-full bg-gray-800 border border-gray-600 text-gray-300 rounded-xl py-2.5 text-sm font-medium"

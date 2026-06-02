@@ -94,6 +94,9 @@ export default function ParentPage() {
   const [loans, setLoans] = useState<FamilyLoan[]>([]);
   const [loanMsg, setLoanMsg] = useState<Record<number, string>>({});
   const [loanInterest, setLoanInterest] = useState<Record<number, string>>({});
+  const [learningProfile, setLearningProfile] = useState<{layer:number;layerLabel:string;encounterRate:number;parentAlertAt:string|null;parentBoosted:boolean} | null>(null);
+  const [boostAmount, setBoostAmount] = useState("3000");
+  const [boostMsg, setBoostMsg] = useState("");
   const [feedTitle, setFeedTitle] = useState("");
   const [feedBody, setFeedBody] = useState("");
   const [feedCategory, setFeedCategory] = useState("NEWS");
@@ -156,6 +159,7 @@ export default function ParentPage() {
       setFund(fd);
       // キーワードも取得(全日付)
       fetch("/api/keyword/all").then(r => r.json()).then(setKeywords).catch(() => {});
+      fetch("/api/learning").then(r => r.json()).then(setLearningProfile).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -323,6 +327,18 @@ export default function ParentPage() {
     }
   }
 
+  async function postBoost() {
+    const amount = parseInt(boostAmount, 10);
+    if (!amount || amount <= 0) return;
+    await fetch("/api/learning/boost", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount }),
+    });
+    setBoostMsg(`¥${amount.toLocaleString()} の知性ブーストを送りました！`);
+    fetch("/api/learning").then(r => r.json()).then(setLearningProfile).catch(() => {});
+  }
+
   const pending = presentations.filter(p => p.status === "PENDING" || p.status === "HOLD");
   const pendingProjects = projects.filter(p => p.status === "PENDING");
   const activeProjects = projects.filter(p => p.status === "ACTIVE");
@@ -393,6 +409,56 @@ export default function ParentPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* 学習レイヤー達成アラート */}
+          {learningProfile?.parentAlertAt && !learningProfile.parentBoosted && (
+            <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">🧬</div>
+                <div className="flex-1">
+                  <div className="font-bold text-amber-800 mb-1">知性進化レポート 🎓</div>
+                  <p className="text-sm text-amber-700 mb-3">
+                    お子様の時事・経済知識が<strong>【{learningProfile.layerLabel}レベル】</strong>に到達しました。
+                    Optisが自律進化中です。この成長に知性ブースト投資を実行しますか？
+                  </p>
+                  <div className="flex gap-2">
+                    <select
+                      value={boostAmount}
+                      onChange={e => setBoostAmount(e.target.value)}
+                      className="border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="1000">¥1,000</option>
+                      <option value="2000">¥2,000</option>
+                      <option value="3000">¥3,000 (推奨)</option>
+                      <option value="5000">¥5,000</option>
+                    </select>
+                    <button
+                      onClick={postBoost}
+                      className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-600"
+                    >
+                      💰 知性ブースト投資
+                    </button>
+                  </div>
+                  {boostMsg && <p className="text-green-600 text-sm mt-2 font-medium">{boostMsg}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 現在のラーニングレイヤー表示 */}
+          {learningProfile && (
+            <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3">
+              <div className="text-2xl">🧠</div>
+              <div>
+                <div className="text-xs text-gray-500">現在のラーニングレイヤー</div>
+                <div className="font-bold text-gray-800">Layer {learningProfile.layer}: {learningProfile.layerLabel}</div>
+              </div>
+              <div className="ml-auto text-right">
+                <div className="text-xs text-gray-500">エンカウント率</div>
+                <div className="font-bold text-blue-600">{Math.round(learningProfile.encounterRate * 100)}%</div>
+              </div>
+            </div>
           )}
 
           {/* 昼食の記録 */}

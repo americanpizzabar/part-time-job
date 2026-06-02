@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
 import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER } from "@/lib/optis";
 import { generateCareerFeedback } from "@/lib/careerFeedback";
+import { getOrCreateLearningProfile } from "@/lib/learningEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -121,8 +122,36 @@ export async function POST(req: Request) {
     careerFeedback = generateCareerFeedback({ stemTotal, artTotal, healthTotal, totalNeeds, assetCategory });
   }
 
+  // エンカウントクイズ: 支出記録のたびに確率でクイズを挟む
+  let encounterQuiz: { id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null = null;
+  if (type === "EXPENSE") {
+    const learningProfile = await getOrCreateLearningProfile();
+    const isLowEngagement = learningProfile.encounterRate < 0.15;
+    // Low engagement: occasional but "hot" quiz; normal: encounter rate check
+    const shouldEncounter = isLowEngagement
+      ? Math.random() < 0.08 // rare but guaranteed hot
+      : Math.random() < learningProfile.encounterRate;
+
+    if (shouldEncounter) {
+      const eq = await prisma.newsQuiz.findFirst({
+        where: { isActive: true, layer: learningProfile.layer },
+        orderBy: { createdAt: "desc" },
+      });
+      if (eq) {
+        encounterQuiz = {
+          id: eq.id,
+          question: eq.question,
+          options: JSON.parse(eq.options),
+          layer: eq.layer,
+          isHot: isLowEngagement,
+          hotReward: isLowEngagement ? 80 : 0, // bonus EXP for hot quiz
+        };
+      }
+    }
+  }
+
   return NextResponse.json(
-    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter, feedBoostApplied, careerFeedback },
+    { ...transaction, expGain, awakened, awakeningTier: awakeningTierAfter, feedBoostApplied, careerFeedback, encounterQuiz },
     { status: 201 }
   );
 }

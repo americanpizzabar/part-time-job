@@ -83,6 +83,7 @@ export default function OptisLabPage() {
   const [darkWeb, setDarkWeb] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [nmdAsk, setNmdAsk] = useState(false);
+  const [encounterQuiz, setEncounterQuiz] = useState<{ id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null>(null);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -137,6 +138,20 @@ export default function OptisLabPage() {
           }
         }
       });
+    // Check for layer-up notification from learning engine
+    fetch("/api/learning")
+      .then(r => r.json())
+      .then((lp: {layer:number;layerLabel:string;layerUpSeen:boolean}) => {
+        if (!lp.layerUpSeen) {
+          // Show layer-up message as Optis dialogue
+          // Temporarily trigger the glitch animation + show layer label
+          setGlitch(true);
+          setTimeout(() => setGlitch(false), 800);
+          // Mark as seen
+          fetch("/api/learning/seen", { method: "POST" });
+        }
+      })
+      .catch(() => {});
   }, [fetchAll]);
 
   // NMDダイアログ: 21時以降、当日未回答なら1回表示
@@ -197,7 +212,7 @@ export default function OptisLabPage() {
     if (pressTimer.current) clearTimeout(pressTimer.current);
   }
 
-  async function handleSaved(info: { expGain: number; awakened?: boolean; careerFeedback?: string | null }) {
+  async function handleSaved(info: { expGain: number; awakened?: boolean; careerFeedback?: string | null; encounterQuiz?: { id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null }) {
     setShowAdd(false);
     if (info.expGain > 0) {
       setExpPop(info.expGain);
@@ -207,6 +222,9 @@ export default function OptisLabPage() {
     if (info.awakened) {
       setAwakeBurst(true);
       setTimeout(() => setAwakeBurst(false), 2400);
+    }
+    if (info.encounterQuiz) {
+      setEncounterQuiz(info.encounterQuiz);
     }
     const fresh = await fetchAll();
     // 本日初回ならルーレット起動(進化カットイン中は閉じてから)
@@ -660,6 +678,50 @@ export default function OptisLabPage() {
           accessoryId={optis.equippedAccessory}
           onClose={closeEvolution}
         />
+      )}
+
+      {/* エンカウンタークイズオーバーレイ */}
+      {encounterQuiz && (
+        <div className="fixed inset-0 bg-black/70 flex items-end z-50">
+          <div className={`w-full max-w-md mx-auto rounded-t-2xl p-5 ${encounterQuiz.isHot ? "bg-gradient-to-b from-red-900 to-gray-900" : "bg-gray-900"}`}>
+            {encounterQuiz.isHot && (
+              <div className="text-center mb-3">
+                <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">🔥 激アツ問題 — 正解で+{encounterQuiz.hotReward} EXP</span>
+              </div>
+            )}
+            <div className="text-gray-400 text-xs mb-1">Layer {encounterQuiz.layer} 暗号を解け</div>
+            <p className="text-white font-medium text-sm mb-4 leading-relaxed">{encounterQuiz.question}</p>
+            <div className="space-y-2 mb-3">
+              {encounterQuiz.options.map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={async () => {
+                    const res = await fetch(`/api/quiz/${encounterQuiz.id}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ selectedIndex: i, responseMs: 5000 }),
+                    });
+                    const data = await res.json();
+                    if (data.correct) {
+                      setExpPop((data.expGained ?? 0) + (encounterQuiz.hotReward ?? 0));
+                      setTimeout(() => setExpPop(null), 1200);
+                    }
+                    if (data.layerDialogue) {
+                      // Show layer dialogue as Optis speech
+                      triggerAnim("jump", data.layerDialogue.slice(0, 60));
+                    }
+                    setEncounterQuiz(null);
+                    fetchAll();
+                  }}
+                  className="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm py-3 px-4 rounded-xl text-left transition-colors border border-gray-700"
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setEncounterQuiz(null)} className="w-full text-gray-500 text-xs py-2">スキップ</button>
+          </div>
+        </div>
       )}
 
       {/* NMDダイアログ */}

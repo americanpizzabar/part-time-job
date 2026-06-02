@@ -7,7 +7,7 @@ import { ASSET_CATEGORIES, ASSET_META, AssetCategory } from "@/lib/optis";
 
 interface QuickAddModalProps {
   onClose: () => void;
-  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean; careerFeedback?: string | null }) => void;
+  onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean; careerFeedback?: string | null; encounterQuiz?: { id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null }) => void;
 }
 
 type Step = "amount" | "sort" | "asset" | "done";
@@ -88,7 +88,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
       if (data.careerFeedback) setCareerFeedback(data.careerFeedback);
       // 吸収アニメーションを見せてから閉じる
       setTimeout(() => {
-        onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false, careerFeedback: data.careerFeedback });
+        onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false, careerFeedback: data.careerFeedback, encounterQuiz: data.encounterQuiz ?? null });
       }, data.careerFeedback ? 2200 : 700);
     } finally {
       setSaving(false);
