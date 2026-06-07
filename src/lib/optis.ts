@@ -250,6 +250,7 @@ export interface Part {
   color: string; // 発光/表示色
   emoji?: string;
   seasonal?: boolean; // 季節/期間限定
+  trader?: boolean; // 商人属性(メルカリ売上)で解放される限定パーツ
 }
 
 export const PARTS: Part[] = [
@@ -273,7 +274,32 @@ export const PARTS: Part[] = [
   // ── LEGENDARY ──────────────────────────────────────────────────────────────
   { id: "aura_rainbow", type: "aura", name: "プリズム・オーラ", rarity: "LEGENDARY", color: "#a855f7", emoji: "🌈" },
   { id: "acc_halo", type: "accessory", name: "レジェンド・ヘイロー", rarity: "LEGENDARY", color: "#fde047", emoji: "💫" },
+  // ── TRADER(商人属性: メルカリ売上で解放される限定サイバーパーツ) ──────────────
+  { id: "acc_gold_visor", type: "accessory", name: "ゴールド・バイザー", rarity: "LEGENDARY", color: "#fbbf24", emoji: "🥽", trader: true },
+  { id: "acc_digital_watch", type: "accessory", name: "デジタル・ウォッチ", rarity: "RARE", color: "#fcd34d", emoji: "⌚", trader: true },
 ];
+
+// 商人(トレーダー)パーツのID一覧 — メルカリ売上で解放
+export const TRADER_PART_IDS = PARTS.filter(p => p.trader).map(p => p.id);
+
+// ダークウェブでの商人割引率(トレーダー属性解放時)
+export const TRADER_MARKET_DISCOUNT = 0.15;
+
+export type QuizGenre = "CURRENT" | "ECONOMY" | "ENGLISH" | "LOGIC";
+
+export const GENRE_META: Record<QuizGenre, { label: string; emoji: string; color: string }> = {
+  CURRENT: { label: "時事・社会", emoji: "📰", color: "#38bdf8" },
+  ECONOMY: { label: "経済・金融", emoji: "💹", color: "#34d399" },
+  ENGLISH: { label: "国際・英語", emoji: "🌐", color: "#a78bfa" },
+  LOGIC:   { label: "ロジカル思考", emoji: "🧩", color: "#fb923c" },
+};
+
+// レイヤー → 学齢ラベル(親キャップ設定用)
+export const LAYER_GRADE_LABEL: Record<number, string> = {
+  1: "高校生レベル",
+  2: "大学生レベル",
+  3: "大人レベル",
+};
 
 export function getPart(id: string | null | undefined): Part | undefined {
   if (!id) return undefined;

@@ -156,6 +156,8 @@ model OptisState {
   generation       Int       @default(1) // 転生(結晶化)回数 + 1
   langMode         String    @default("JA") // 英語モード: JA | EN
   wisdomPoints     Int       @default(0) // 知性ポイント
+  mercariTotal     Int       @default(0) // メルカリ等で自力で稼いだ累計(能動的収入)
+  traderUnlocked   Boolean   @default(false) // 商人(トレーダー)属性の解放
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -359,6 +361,7 @@ model NewsQuiz {
   weatherType  String        @default("NEUTRAL")
   isActive     Boolean       @default(true)
   layer        Int           @default(1) // 1=高校受験 2=大学受験 3=ビジネス/GMAT
+  genre        String        @default("CURRENT") // CURRENT(時事) | ECONOMY(経済) | ENGLISH(英語) | LOGIC(論理)
   createdAt    DateTime      @default(now())
   attempts     QuizAttempt[]
 }
@@ -373,6 +376,8 @@ model QuizAttempt {
   expGained    Int      @default(0)
   responseMs   Int?     // 回答までの時間(ms)
   layer        Int      @default(1) // 出題時の難易度レイヤー
+  genre        String   @default("CURRENT") // 出題ジャンル(履歴・分析用)
+  questionText String?  // 出題時の問題文スナップショット(履歴表示用)
   createdAt    DateTime @default(now())
 }
 
@@ -437,6 +442,21 @@ model LearningProfile {
   layerUpSeen    Boolean   @default(true)  // レイヤーアップ演出済みフラグ
   parentAlertAt  DateTime?              // 親通知発火日時
   parentBoosted  Boolean   @default(false) // 親がブースト済み
+  // 親側の出題範囲・レベル管理設定
+  genreCurrent   Boolean   @default(true) // 時事・社会 ON/OFF
+  genreEconomy   Boolean   @default(true) // 経済・金融 ON/OFF
+  genreEnglish   Boolean   @default(true) // 国際・英語 ON/OFF
+  genreLogic     Boolean   @default(true) // ロジカル思考 ON/OFF
+  levelCap       Int       @default(0)   // 上限レイヤー(0=制限なし/自動, 1=高校まで, 2=大学まで, 3=大人まで)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// ─── メルカリ(フリマ)売上 ─────────────────────────────────────────────
+model MercariSale {
+  id        Int      @id @default(autoincrement())
+  itemName  String?  // 売れた商品名(任意)
+  amount    Int      // 売上金額(円)
+  date      String   // "YYYY-MM-DD"
+  createdAt DateTime @default(now())
 }
