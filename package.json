@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build",
+    "build": "sh -c 'prisma migrate deploy || (echo \"Retrying migration after 15s...\" && sleep 15 && prisma migrate deploy)' && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"
