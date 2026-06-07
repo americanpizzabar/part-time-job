@@ -6,6 +6,7 @@ import { STATUS_LABELS, STATUS_COLORS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
 import MissionManager from "@/components/MissionManager";
 import BoostSequence from "@/components/BoostSequence";
+import AccuracyRadar from "@/components/AccuracyRadar";
 import { useRole } from "@/lib/useRole";
 import { projectProgress, boostPerContribution } from "@/lib/optis";
 
@@ -85,6 +86,26 @@ interface OutcomeReport {
   project: { name: string };
 }
 
+const GENRE_META: Record<string, { label: string; emoji: string; color: string }> = {
+  CURRENT: { label: "時事・社会", emoji: "📰", color: "#38bdf8" },
+  ECONOMY: { label: "経済・金融", emoji: "💹", color: "#34d399" },
+  ENGLISH: { label: "国際・英語", emoji: "🌐", color: "#a78bfa" },
+  LOGIC: { label: "ロジカル思考", emoji: "🧩", color: "#fb923c" },
+};
+
+const LAYER_GRADE: Record<number, string> = {
+  1: "高校受験",
+  2: "大学受験",
+  3: "ビジネス/GMAT",
+};
+
+const LEVEL_CAP_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "制限なし(自動)" },
+  { value: 1, label: "高校生まで" },
+  { value: 2, label: "大学生まで" },
+  { value: 3, label: "大人まで" },
+];
+
 export default function ParentPage() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [presentations, setPresentations] = useState<Presentation[]>([]);
@@ -95,6 +116,9 @@ export default function ParentPage() {
   const [loanMsg, setLoanMsg] = useState<Record<number, string>>({});
   const [loanInterest, setLoanInterest] = useState<Record<number, string>>({});
   const [learningProfile, setLearningProfile] = useState<{layer:number;layerLabel:string;encounterRate:number;parentAlertAt:string|null;parentBoosted:boolean} | null>(null);
+  const [learnSettings, setLearnSettings] = useState<{genreCurrent:boolean;genreEconomy:boolean;genreEnglish:boolean;genreLogic:boolean;levelCap:number;layer:number;layerLabel:string} | null>(null);
+  const [history, setHistory] = useState<{id:number;date:string;correct:boolean;layer:number;genre:string;questionText:string|null;selectedAnswer:string|null;correctAnswer:string|null;explanation:string|null}[]>([]);
+  const [accuracy, setAccuracy] = useState<{genres:{genre:string;label:string;total:number;correct:number;accuracy:number}[];overall:{total:number;correct:number;accuracy:number}} | null>(null);
   const [boostAmount, setBoostAmount] = useState("3000");
   const [boostMsg, setBoostMsg] = useState("");
   const [feedTitle, setFeedTitle] = useState("");
@@ -112,13 +136,6 @@ export default function ParentPage() {
   const [weatherDesc, setWeatherDesc] = useState("");
   const [weatherPosting, setWeatherPosting] = useState(false);
   const [weatherMsg, setWeatherMsg] = useState("");
-  // Quiz
-  const [quizQuestion, setQuizQuestion] = useState("");
-  const [quizOptions, setQuizOptions] = useState(["", "", ""]);
-  const [quizCorrect, setQuizCorrect] = useState(0);
-  const [quizExplain, setQuizExplain] = useState("");
-  const [quizPosting, setQuizPosting] = useState(false);
-  const [quizMsg, setQuizMsg] = useState("");
   // Fund
   const [fund, setFund] = useState<{ invested: number; currentValue: number; parentMatchRate: number; baseReturnRate: number } | null>(null);
   const [fundMatchRate, setFundMatchRate] = useState("");
@@ -160,6 +177,9 @@ export default function ParentPage() {
       // キーワードも取得(全日付)
       fetch("/api/keyword/all").then(r => r.json()).then(setKeywords).catch(() => {});
       fetch("/api/learning").then(r => r.json()).then(setLearningProfile).catch(() => {});
+      fetch("/api/learning/settings").then(r => r.json()).then(setLearnSettings).catch(() => {});
+      fetch("/api/learning/history").then(r => r.json()).then(setHistory).catch(() => {});
+      fetch("/api/learning/accuracy").then(r => r.json()).then(setAccuracy).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -215,27 +235,6 @@ export default function ParentPage() {
     setWeatherDesc("");
     setWeatherPosting(false);
     setTimeout(() => setWeatherMsg(""), 3000);
-  }
-
-  async function postQuiz() {
-    if (!quizQuestion.trim() || quizOptions.some(o => !o.trim()) || !quizExplain.trim()) return;
-    setQuizPosting(true);
-    const r = await fetch("/api/quiz", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        question: quizQuestion,
-        options: quizOptions,
-        correctIndex: quizCorrect,
-        explanation: quizExplain,
-        weatherType,
-      }),
-    });
-    const data = await r.json();
-    setQuizMsg(r.ok ? `✅ クイズを作成しました (ID: ${data.id})` : `❌ ${data.error}`);
-    setQuizQuestion(""); setQuizOptions(["", "", ""]); setQuizExplain("");
-    setQuizPosting(false);
-    setTimeout(() => setQuizMsg(""), 3000);
   }
 
   async function saveFundSettings() {
@@ -325,6 +324,11 @@ export default function ParentPage() {
     } finally {
       setKwPosting(false);
     }
+  }
+
+  async function updateLearnSettings(patch: Partial<{genreCurrent:boolean;genreEconomy:boolean;genreEnglish:boolean;genreLogic:boolean;levelCap:number}>) {
+    await fetch("/api/learning/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch) });
+    fetch("/api/learning/settings").then(r=>r.json()).then(setLearnSettings).catch(()=>{});
   }
 
   async function postBoost() {
@@ -446,20 +450,147 @@ export default function ParentPage() {
             </div>
           )}
 
-          {/* 現在のラーニングレイヤー表示 */}
-          {learningProfile && (
-            <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3">
-              <div className="text-2xl">🧠</div>
-              <div>
-                <div className="text-xs text-gray-500">現在のラーニングレイヤー</div>
-                <div className="font-bold text-gray-800">Layer {learningProfile.layer}: {learningProfile.layerLabel}</div>
-              </div>
-              <div className="ml-auto text-right">
-                <div className="text-xs text-gray-500">エンカウント率</div>
-                <div className="font-bold text-blue-600">{Math.round(learningProfile.encounterRate * 100)}%</div>
-              </div>
+          {/* ─── 自動学習管理ダッシュボード ─── */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🧠</span>
+              <h2 className="font-bold text-gray-800">自動学習管理</h2>
             </div>
-          )}
+
+            {/* Section A: 出題範囲 & レベル管理設定 */}
+            <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
+              <h3 className="font-bold text-gray-800 text-sm">出題範囲 &amp; レベル管理</h3>
+
+              {/* ジャンルトグル */}
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ["genreCurrent", "CURRENT"],
+                  ["genreEconomy", "ECONOMY"],
+                  ["genreEnglish", "ENGLISH"],
+                  ["genreLogic", "LOGIC"],
+                ] as const).map(([key, gkey]) => {
+                  const meta = GENRE_META[gkey];
+                  const on = learnSettings ? learnSettings[key] : false;
+                  return (
+                    <button
+                      key={key}
+                      disabled={!learnSettings}
+                      onClick={() => updateLearnSettings({ [key]: !on } as Partial<{genreCurrent:boolean;genreEconomy:boolean;genreEnglish:boolean;genreLogic:boolean}>)}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? "border-transparent" : "border-gray-200 bg-gray-50"}`}
+                      style={on ? { backgroundColor: `${meta.color}1a`, borderColor: meta.color } : undefined}
+                    >
+                      <span className="text-lg">{meta.emoji}</span>
+                      <span className={`flex-1 text-xs font-bold ${on ? "text-gray-800" : "text-gray-400"}`}>{meta.label}</span>
+                      <span
+                        className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${on ? "" : "bg-gray-300"}`}
+                        style={on ? { backgroundColor: meta.color } : undefined}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${on ? "translate-x-4" : "translate-x-1"}`} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* レベルキャップ */}
+              <div>
+                <div className="text-xs text-gray-500 mb-1.5">出題レベルの上限</div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {LEVEL_CAP_OPTIONS.map(opt => {
+                    const active = learnSettings?.levelCap === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        disabled={!learnSettings}
+                        onClick={() => updateLearnSettings({ levelCap: opt.value })}
+                        className={`rounded-xl px-2 py-2 text-xs font-bold transition-colors ${active ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {learnSettings && (
+                <div className="rounded-xl bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+                  現在の出題レベル: <strong>{learnSettings.layerLabel}</strong>
+                </div>
+              )}
+            </div>
+
+            {/* Section B: ジャンル別正答率 (レーダーチャート) */}
+            <div className="bg-white rounded-2xl shadow-sm p-4">
+              <h3 className="font-bold text-gray-800 text-sm mb-2">ジャンル別正答率</h3>
+              {accuracy ? (
+                <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-around">
+                  <AccuracyRadar
+                    data={(["ECONOMY", "CURRENT", "ENGLISH", "LOGIC"] as const).map(g => {
+                      const found = accuracy.genres.find(x => x.genre === g);
+                      return { label: GENRE_META[g].label, accuracy: found?.accuracy ?? 0 };
+                    })}
+                  />
+                  <div className="text-center">
+                    <div className="text-xs text-gray-500">総合正答率</div>
+                    <div className="text-4xl font-bold text-indigo-600">{accuracy.overall.accuracy}%</div>
+                    <div className="text-xs text-gray-400 mt-1">{accuracy.overall.correct} / {accuracy.overall.total} 問正解</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-gray-400">正答率データを読み込み中…</div>
+              )}
+            </div>
+
+            {/* Section C: 過去の出題履歴 */}
+            <div className="bg-white rounded-2xl shadow-sm p-4">
+              <h3 className="font-bold text-gray-800 text-sm mb-3">過去の出題履歴</h3>
+              {history.length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-400">まだ出題履歴がありません</div>
+              ) : (
+                <div className="space-y-2">
+                  {history.map(h => {
+                    const meta = GENRE_META[h.genre] ?? { label: h.genre, emoji: "❓", color: "#9ca3af" };
+                    const q = h.questionText ?? "";
+                    const truncated = q.length > 60 ? `${q.slice(0, 60)}…` : q;
+                    let dateStr = h.date;
+                    const d = new Date(h.date);
+                    if (!isNaN(d.getTime())) {
+                      dateStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    }
+                    return (
+                      <div key={h.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold text-white"
+                            style={{ backgroundColor: meta.color }}
+                          >
+                            <span>{meta.emoji}</span>{meta.label}
+                          </span>
+                          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                            {LAYER_GRADE[h.layer] ?? `Layer ${h.layer}`}
+                          </span>
+                          <span className="ml-auto text-[11px] text-gray-400">{dateStr}</span>
+                          <span
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white ${h.correct ? "bg-emerald-500" : "bg-red-500"}`}
+                          >
+                            {h.correct ? "◯" : "×"}
+                          </span>
+                        </div>
+                        {truncated && <p className="mt-2 text-sm text-gray-700">{truncated}</p>}
+                        <div className="mt-1.5 text-xs text-gray-500">
+                          あなたの解答: <span className={h.correct ? "text-emerald-600 font-medium" : "text-red-600 font-medium"}>{h.selectedAnswer ?? "—"}</span>
+                          {" / "}正解: <span className="text-gray-700 font-medium">{h.correctAnswer ?? "—"}</span>
+                        </div>
+                        {h.explanation && (
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-gray-400">{h.explanation}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* 昼食の記録 */}
           <div>
@@ -777,65 +908,6 @@ export default function ParentPage() {
                 className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
               >
                 {weatherPosting ? "設定中…" : "ウェザーを設定する"}
-              </button>
-            </div>
-          </div>
-
-          {/* 時事クイズ作成 */}
-          <div>
-            <h2 className="font-bold text-gray-800 mb-2">🧠 時事クイズ作成</h2>
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
-              <div>
-                <label className="text-xs text-gray-500">問題文</label>
-                <textarea
-                  rows={2}
-                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
-                  placeholder="例: インフレとは何を意味しますか？"
-                  value={quizQuestion}
-                  onChange={e => setQuizQuestion(e.target.value)}
-                />
-              </div>
-              {quizOptions.map((opt, i) => (
-                <div key={i}>
-                  <label className="text-xs text-gray-500">
-                    選択肢 {i + 1} {quizCorrect === i && <span className="text-green-600">(正解)</span>}
-                  </label>
-                  <div className="flex gap-2 mt-1">
-                    <input
-                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
-                      value={opt}
-                      onChange={e => {
-                        const newOpts = [...quizOptions];
-                        newOpts[i] = e.target.value;
-                        setQuizOptions(newOpts);
-                      }}
-                    />
-                    <button
-                      onClick={() => setQuizCorrect(i)}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border ${quizCorrect === i ? "bg-green-100 border-green-400 text-green-700" : "border-gray-200 text-gray-400"}`}
-                    >
-                      正解
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div>
-                <label className="text-xs text-gray-500">解説</label>
-                <textarea
-                  rows={2}
-                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
-                  placeholder="正解後に表示される解説"
-                  value={quizExplain}
-                  onChange={e => setQuizExplain(e.target.value)}
-                />
-              </div>
-              {quizMsg && <div className="text-sm text-blue-700 bg-blue-50 rounded-xl px-3 py-2">{quizMsg}</div>}
-              <button
-                onClick={postQuiz}
-                disabled={quizPosting || !quizQuestion.trim() || quizOptions.some(o => !o.trim()) || !quizExplain.trim()}
-                className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
-              >
-                {quizPosting ? "作成中…" : "クイズを作成する"}
               </button>
             </div>
           </div>

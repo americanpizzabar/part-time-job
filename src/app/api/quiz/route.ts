@@ -8,16 +8,26 @@ export async function GET() {
   const now = new Date();
 
   const profile = await getOrCreateLearningProfile();
-  // Find active quiz at current layer or one below (for warmup)
-  const quiz = await prisma.newsQuiz.findFirst({
-    where: {
-      isActive: true,
-      layer: { in: [profile.layer, Math.max(1, profile.layer - 1)] },
-    },
-    orderBy: { createdAt: "desc" },
-  });
 
-  // Seed layer 2 and 3 quizzes if missing
+  // Build the allowed-genre list from parent toggles. If ALL are off, treat as all-on.
+  const allToggles = {
+    CURRENT: profile.genreCurrent,
+    ECONOMY: profile.genreEconomy,
+    ENGLISH: profile.genreEnglish,
+    LOGIC: profile.genreLogic,
+  };
+  let allowedGenres = (Object.keys(allToggles) as (keyof typeof allToggles)[]).filter(
+    (g) => allToggles[g],
+  );
+  if (allowedGenres.length === 0) {
+    allowedGenres = ["CURRENT", "ECONOMY", "ENGLISH", "LOGIC"];
+  }
+
+  // Effective layer respects the parent level cap (0 = no cap)
+  const effectiveLayer =
+    profile.levelCap > 0 ? Math.min(profile.layer, profile.levelCap) : profile.layer;
+
+  // Seed layer 2 and 3 quizzes if missing (with genre)
   const hasLayer2 = await prisma.newsQuiz.count({ where: { layer: 2 } });
   if (hasLayer2 === 0) {
     await prisma.newsQuiz.createMany({
@@ -28,6 +38,7 @@ export async function GET() {
           correctIndex: 1,
           explanation: "フィリップス曲線はインフレ率と失業率のトレードオフ関係を示す。景気が良いと雇用が増え物価も上がる傾向がある。",
           weatherType: "INFLATION",
+          genre: "ECONOMY",
           layer: 2,
         },
         {
@@ -36,6 +47,7 @@ export async function GET() {
           correctIndex: 1,
           explanation: "PER = 株価 ÷ EPS（1株当たり利益）。投資家が利益の何倍を払っているかを示す指標。",
           weatherType: "NEUTRAL",
+          genre: "ECONOMY",
           layer: 2,
         },
         {
@@ -44,6 +56,7 @@ export async function GET() {
           correctIndex: 1,
           explanation: "量的緩和は中央銀行が市場から国債等を購入することで資金を供給し、金利を下げて景気を刺激する政策。",
           weatherType: "RATE_HIKE",
+          genre: "ECONOMY",
           layer: 2,
         },
       ],
@@ -60,6 +73,7 @@ export async function GET() {
           correctIndex: 1,
           explanation: "ポーターの5フォースは①既存競合②新規参入③代替品④買い手⑤売り手の5つ。従業員満足度は含まれない。",
           weatherType: "NEUTRAL",
+          genre: "ECONOMY",
           layer: 3,
         },
         {
@@ -68,6 +82,7 @@ export async function GET() {
           correctIndex: 1,
           explanation: "カーネマンの研究で、人は1万円の損失を1万円の利益の約2倍苦痛に感じる。これが塩漬け株や損切りできない原因。",
           weatherType: "DEFLATION",
+          genre: "LOGIC",
           layer: 3,
         },
         {
@@ -76,11 +91,47 @@ export async function GET() {
           correctIndex: 1,
           explanation: "割引率は将来キャッシュフローを現在価値に換算するレート。通常はWACC（加重平均資本コスト）が使われる。",
           weatherType: "RATE_HIKE",
+          genre: "ECONOMY",
           layer: 3,
         },
       ],
     });
   }
+
+  // Ensure all 4 genres have layer-1 content
+  const hasEnglish = await prisma.newsQuiz.count({ where: { genre: "ENGLISH" } });
+  if (hasEnglish === 0) {
+    await prisma.newsQuiz.createMany({ data: [
+      { question:"'Invest'の意味として正しいのは？", options:JSON.stringify(["浪費する","投資する","借金する"]), correctIndex:1, explanation:"invest=投資する。将来の利益のために資金を投じること。", genre:"ENGLISH", layer:1 },
+      { question:"'Budget'の意味は？", options:JSON.stringify(["予算","貯金","負債"]), correctIndex:0, explanation:"budget=予算。計画的にお金を使うための枠。", genre:"ENGLISH", layer:1 },
+      { question:"'Asset'の意味は？", options:JSON.stringify(["資産","費用","税金"]), correctIndex:0, explanation:"asset=資産。価値を生み出すもの。", genre:"ENGLISH", layer:2 },
+    ]});
+  }
+  const hasLogic = await prisma.newsQuiz.count({ where: { genre: "LOGIC" } });
+  if (hasLogic === 0) {
+    await prisma.newsQuiz.createMany({ data: [
+      { question:"全てのAはB。XはA。よってXは？", options:JSON.stringify(["Bである","Bでない","判断不能"]), correctIndex:0, explanation:"三段論法。AならばB、XはAなので、Xは必ずB。", genre:"LOGIC", layer:1 },
+      { question:"2,4,8,16,次の数は？", options:JSON.stringify(["24","32","20"]), correctIndex:1, explanation:"前の数を2倍にする数列。16×2=32。", genre:"LOGIC", layer:1 },
+      { question:"ある店で全商品が3割引。1000円の商品の支払額は？", options:JSON.stringify(["700円","970円","300円"]), correctIndex:0, explanation:"3割引=30%off。1000×0.7=700円。", genre:"LOGIC", layer:2 },
+    ]});
+  }
+  const hasCurrent = await prisma.newsQuiz.count({ where: { genre: "CURRENT" } });
+  if (hasCurrent === 0) {
+    await prisma.newsQuiz.createMany({ data: [
+      { question:"再生可能エネルギーに含まれないのは？", options:JSON.stringify(["太陽光","風力","石炭火力"]), correctIndex:2, explanation:"石炭火力は化石燃料でCO2を排出する。太陽光・風力は再生可能エネルギー。", genre:"CURRENT", layer:1 },
+      { question:"SDGsは何の略？", options:JSON.stringify(["持続可能な開発目標","世界デジタル標準","社会的データ統計"]), correctIndex:0, explanation:"SDGs=Sustainable Development Goals(持続可能な開発目標)。2030年までの国際目標。", genre:"CURRENT", layer:1 },
+    ]});
+  }
+
+  // Find active quiz within allowed genres at effective layer or one below (for warmup)
+  const quiz = await prisma.newsQuiz.findFirst({
+    where: {
+      isActive: true,
+      genre: { in: allowedGenres },
+      layer: { in: [effectiveLayer, Math.max(1, effectiveLayer - 1)] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
   // Check if user has an active shield
   const shieldAttempt = await prisma.quizAttempt.findFirst({
@@ -95,7 +146,14 @@ export async function GET() {
   const shieldUntil = shieldAttempt?.shieldUntil ?? null;
 
   if (!quiz) {
-    return NextResponse.json({ quiz: null, hasShield, shieldUntil });
+    return NextResponse.json({
+      quiz: null,
+      hasShield,
+      shieldUntil,
+      layer: profile.layer,
+      effectiveLayer,
+      allowedGenres,
+    });
   }
 
   // Parse options
@@ -113,10 +171,13 @@ export async function GET() {
       options,
       weatherType: quiz.weatherType,
       explanation: quiz.explanation,
+      genre: quiz.genre,
     },
     hasShield,
     shieldUntil,
     layer: profile.layer,
+    effectiveLayer,
+    allowedGenres,
     layerLabel: LAYER_LABELS[profile.layer] ?? "高校受験",
   });
 }

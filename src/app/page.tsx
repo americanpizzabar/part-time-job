@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { formatJPY } from "@/lib/dateUtils";
+import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour, generationBonus, CRYSTALLIZE_MIN_LEVEL, CRYSTALLIZE_MIN_STAGE } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
 import OptisCreature from "@/components/OptisCreature";
@@ -13,6 +13,8 @@ import MissionInbox from "@/components/MissionInbox";
 import ChestBanner from "@/components/ChestBanner";
 import EvolutionCutin from "@/components/EvolutionCutin";
 import QuizBanner from "@/components/QuizBanner";
+import MoneyFlow from "@/components/MoneyFlow";
+import SyncBarometer from "@/components/SyncBarometer";
 
 interface OptisData {
   experience: number;
@@ -40,7 +42,20 @@ interface OptisData {
   generation: number;
   langMode: string;
   hasQuizShield: boolean;
+  mercariTotal: number;
+  traderUnlocked: boolean;
 }
+
+interface MonthTransaction {
+  id: number;
+  type: "INCOME" | "EXPENSE";
+  amount: number;
+  needsWants: "NEEDS" | "WANTS" | null;
+  category: string;
+  date: string;
+}
+
+interface GenreAccuracy { genre: string; label: string; total: number; correct: number; accuracy: number; }
 
 interface ActiveProject {
   id: number;
@@ -83,6 +98,14 @@ export default function OptisLabPage() {
   const [darkWeb, setDarkWeb] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [nmdAsk, setNmdAsk] = useState(false);
+  const [showMercari, setShowMercari] = useState(false);
+  const [mercariBurst, setMercariBurst] = useState(false);
+  const [mercariForm, setMercariForm] = useState({ amount: "", itemName: "" });
+  const [mercariSaving, setMercariSaving] = useState(false);
+  const [traderCelebration, setTraderCelebration] = useState(false);
+  const [monthTx, setMonthTx] = useState<MonthTransaction[]>([]);
+  const [syncAccuracy, setSyncAccuracy] = useState(0);
+  const [syncGenres, setSyncGenres] = useState<{ label: string; accuracy: number }[]>([]);
   const [encounterQuiz, setEncounterQuiz] = useState<{ id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null>(null);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,15 +130,23 @@ export default function OptisLabPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const [o, b, goals, projects, brain] = await Promise.all([
+    const { start, end } = currentMonthRange();
+    const [o, b, goals, projects, brain, tx, acc] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
       fetch("/api/balance").then(r => r.json()),
       fetch("/api/goals").then(r => r.json()),
       fetch("/api/projects").then(r => r.json()),
       fetch("/api/brain").then(r => r.json()).catch(() => ({ brainType: "BALANCED" })),
+      fetch(`/api/transactions?startDate=${start}&endDate=${end}`).then(r => r.json()).catch(() => []),
+      fetch("/api/learning/accuracy").then(r => r.json()).catch(() => null),
     ]);
     setOptis(o);
     setBalance(b);
+    setMonthTx(Array.isArray(tx) ? (tx as MonthTransaction[]) : []);
+    if (acc) {
+      setSyncAccuracy(acc.overall?.accuracy ?? 0);
+      setSyncGenres(((acc.genres ?? []) as GenreAccuracy[]).map(g => ({ label: g.label, accuracy: g.accuracy })));
+    }
     if (brain?.brainType) setBrainType(brain.brainType as BrainType);
     const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
     setTopGoal(active.length > 0 ? active[0] : null);
@@ -295,6 +326,40 @@ export default function OptisLabPage() {
     fetchAll();
   }
 
+  async function submitMercari() {
+    const amount = Number(mercariForm.amount);
+    if (!amount || amount <= 0) return;
+    setMercariSaving(true);
+    try {
+      const r = await fetch("/api/mercari", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, itemName: mercariForm.itemName || undefined }),
+      });
+      const data = await r.json();
+      setShowMercari(false);
+      setMercariForm({ amount: "", itemName: "" });
+      if (r.ok) {
+        setMercariBurst(true);
+        setTimeout(() => setMercariBurst(false), 2000);
+        triggerAnim("jump", "リアルな経済行動(不用品の資産化)を確認！");
+        if (data.expGain > 0) {
+          setExpPop(data.expGain);
+          playExpGain();
+          setTimeout(() => setExpPop(null), 1100);
+        }
+        if (data.justUnlockedTrader) {
+          setTraderCelebration(true);
+        }
+        await fetchAll();
+      } else {
+        alert(data.error ?? "保存に失敗しました");
+      }
+    } finally {
+      setMercariSaving(false);
+    }
+  }
+
   if (!optis) {
     return (
       <div className="flex items-center justify-center h-80">
@@ -379,6 +444,35 @@ export default function OptisLabPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-2.5 text-center">
           <div className="text-[10px] text-gray-400">信用スコア</div>
           <div className="text-sm font-bold text-indigo-600">{optis.creditScore}</div>
+        </div>
+      </div>
+
+      {/* ゴールドメーター: 自分で稼いだ資産 */}
+      <div className="rounded-xl p-3 relative overflow-hidden border border-amber-400/50"
+        style={{ background: "linear-gradient(135deg,#1c1407 0%,#3b2a08 60%,#4a3409 100%)" }}>
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">🛒</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] text-amber-300/80 tracking-wide">自分で稼いだ資産</div>
+            <div className="text-xl font-black text-transparent bg-clip-text"
+              style={{ backgroundImage: "linear-gradient(90deg,#fde68a,#fbbf24,#f59e0b)" }}>
+              {formatJPY(optis.mercariTotal ?? 0)}
+            </div>
+          </div>
+          {optis.traderUnlocked && (
+            <span className="text-[10px] font-bold text-amber-900 px-2 py-1 rounded-full shrink-0"
+              style={{ background: "linear-gradient(90deg,#fbbf24,#f59e0b)", boxShadow: "0 0 10px #fbbf2488" }}>
+              🥽 商人(トレーダー)
+            </span>
+          )}
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
+          <div className="h-full rounded-full animate-pulse"
+            style={{
+              width: `${Math.min(100, ((optis.mercariTotal ?? 0) / 10000) * 100)}%`,
+              background: "linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a)",
+              boxShadow: "0 0 12px #fbbf24cc",
+            }} />
         </div>
       </div>
 
@@ -562,6 +656,12 @@ export default function OptisLabPage() {
         </div>
       </div>
 
+      {/* マネー・フロー */}
+      <MoneyFlow transactions={monthTx} />
+
+      {/* シンクロ(正答率)バロメーター */}
+      <SyncBarometer accuracy={syncAccuracy} genres={syncGenres} />
+
       {/* 導線 */}
       <div className="grid grid-cols-2 gap-2">
         <Link href="/tasks" className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 hover:border-blue-300">
@@ -578,6 +678,17 @@ export default function OptisLabPage() {
             <div className="text-[11px] text-gray-500">集める・装備</div>
           </div>
         </Link>
+        <button
+          onClick={() => setShowMercari(true)}
+          className="flex items-center gap-2 rounded-xl border border-amber-400/60 p-3 text-left hover:border-amber-300"
+          style={{ background: "linear-gradient(135deg,#2a1e07,#3b2a08)" }}
+        >
+          <span className="text-2xl">🛒</span>
+          <div className="min-w-0">
+            <div className="font-medium text-amber-200 text-sm">メルカリ売上</div>
+            <div className="text-[11px] text-amber-400/70">資産を稼ぐ</div>
+          </div>
+        </button>
         {!optis.activeLoan && (
           <button
             onClick={() => setShowLoanForm(true)}
@@ -603,6 +714,89 @@ export default function OptisLabPage() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
         </svg>
       </button>
+
+      {/* メルカリ売上モーダル */}
+      {showMercari && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
+          <div className="w-full max-w-sm sm:rounded-2xl rounded-t-2xl shadow-xl p-5 space-y-4 border border-amber-400/40"
+            style={{ background: "linear-gradient(135deg,#1c1407,#2a1e07)" }}>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🛒</span>
+              <h2 className="text-lg font-bold text-amber-200">メルカリ・サクセス</h2>
+            </div>
+            <p className="text-xs text-amber-300/70">不用品を売ってお金に変えよう。自分で稼いだ資産になるよ。</p>
+            <div>
+              <label className="text-xs font-medium text-amber-300/80">売れた金額(円)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="mt-1 w-full bg-black/30 border border-amber-400/40 rounded-xl px-3 py-2.5 text-sm text-amber-100 focus:outline-none focus:border-amber-300"
+                placeholder="1200"
+                value={mercariForm.amount}
+                onChange={e => setMercariForm({ ...mercariForm, amount: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-amber-300/80">何を売った？(任意)</label>
+              <input
+                className="mt-1 w-full bg-black/30 border border-amber-400/40 rounded-xl px-3 py-2.5 text-sm text-amber-100 focus:outline-none focus:border-amber-300"
+                placeholder="例: 読み終わった本、使わないゲーム"
+                value={mercariForm.itemName}
+                onChange={e => setMercariForm({ ...mercariForm, itemName: e.target.value })}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowMercari(false)} className="flex-1 border border-amber-400/40 text-amber-200 rounded-xl py-2.5 font-semibold">
+                キャンセル
+              </button>
+              <button
+                onClick={submitMercari}
+                disabled={mercariSaving || !mercariForm.amount || Number(mercariForm.amount) <= 0}
+                className="flex-1 rounded-xl py-2.5 font-semibold text-amber-950 disabled:opacity-40"
+                style={{ background: "linear-gradient(90deg,#fbbf24,#f59e0b)" }}
+              >
+                {mercariSaving ? "記録中…" : "売上を記録"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* メルカリ・バースト演出 */}
+      {mercariBurst && (
+        <div className="fixed inset-0 z-[85] pointer-events-none flex items-center justify-center overflow-hidden">
+          <div className="absolute inset-0 bg-amber-300/10 animate-pulse" />
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-amber-400/40 animate-ping" style={{ width: 180, height: 180, left: -40, top: -40 }} />
+            <div className="text-7xl animate-bounce">📦</div>
+            <div className="absolute -top-6 -left-10 text-4xl animate-ping">✨</div>
+            <div className="absolute -top-4 left-16 text-4xl animate-ping" style={{ animationDelay: "0.2s" }}>💰</div>
+            <div className="absolute top-12 -left-12 text-3xl animate-ping" style={{ animationDelay: "0.4s" }}>💰</div>
+            <div className="absolute top-14 left-14 text-3xl animate-ping" style={{ animationDelay: "0.3s" }}>✨</div>
+            <div className="absolute -bottom-2 left-2 text-4xl animate-bounce" style={{ animationDelay: "0.1s" }}>🪙</div>
+          </div>
+        </div>
+      )}
+
+      {/* 商人(トレーダー)解放セレブレーション */}
+      {traderCelebration && (
+        <div className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-6"
+          onClick={() => setTraderCelebration(false)}>
+          <div className="reward-pop text-center max-w-sm rounded-2xl p-6 border border-amber-400/60"
+            style={{ background: "linear-gradient(135deg,#2a1e07,#4a3409)" }}>
+            <div className="text-5xl mb-3">🥽</div>
+            <div className="text-amber-200 font-black text-lg mb-2">商人(トレーダー)属性を獲得！</div>
+            <p className="text-sm text-amber-300/90 leading-relaxed">
+              ゴールド・バイザーとデジタル・ウォッチを解放！<br />
+              ダークウェブで限定アイテムを割引購入できる！
+            </p>
+            <button className="mt-5 px-6 py-2.5 rounded-full font-bold text-amber-950"
+              style={{ background: "linear-gradient(90deg,#fbbf24,#f59e0b)" }}>
+              受け取る
+            </button>
+          </div>
+        </div>
+      )}
 
       {showAdd && <QuickAddModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
       {showRoulette && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
-import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WEATHER_META, WeatherType } from "@/lib/optis";
+import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WEATHER_META, WeatherType, TRADER_MARKET_DISCOUNT } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -38,17 +38,23 @@ export async function GET() {
     if (meta) weatherMultiplier = meta.marketMultiplier;
   }
 
+  const traderUnlocked = state.traderUnlocked;
+
   const listings = await Promise.all(
     PARTS.filter(p => p.id !== "body_core" && p.id !== "aura_basic").map(async (part) => {
       const priceRow = await getOrInitPrice(part.id);
       const baseRawPrice = priceRow?.currentPrice ?? MARKET_BASE_PRICES[part.rarity];
-      const currentPrice = Math.round((baseRawPrice * weatherMultiplier) / 5) * 5;
+      const weatherPrice = Math.round((baseRawPrice * weatherMultiplier) / 5) * 5;
+      // Trader属性解放時は買値に15%割引を適用(売値は据え置き)
+      const currentPrice = traderUnlocked
+        ? Math.round((weatherPrice * (1 - TRADER_MARKET_DISCOUNT)) / 5) * 5
+        : weatherPrice;
       const base = MARKET_BASE_PRICES[part.rarity];
       const priceDelta = currentPrice - base;
       return {
         ...part,
         currentPrice,
-        sellPrice: marketSellPrice(currentPrice),
+        sellPrice: marketSellPrice(weatherPrice),
         basePrice: base,
         priceDelta,
         trend: priceDelta > 5 ? "up" : priceDelta < -5 ? "down" : "flat",
@@ -66,6 +72,8 @@ export async function GET() {
     weatherMultiplier,
     activeWeather: activeWeather ? { type: activeWeather.type, description: activeWeather.description } : null,
     hasShield,
+    traderUnlocked,
+    traderDiscount: TRADER_MARKET_DISCOUNT,
   });
 }
 
@@ -94,7 +102,11 @@ export async function POST(req: Request) {
     const meta = WEATHER_META[activeWeather.type as WeatherType];
     if (meta) weatherMultiplier = meta.marketMultiplier;
   }
-  const effectivePrice = Math.round((priceRow.currentPrice * weatherMultiplier) / 5) * 5;
+  const weatherPrice = Math.round((priceRow.currentPrice * weatherMultiplier) / 5) * 5;
+  // 買値はTrader属性解放時に15%割引。売値は割引なし。
+  const buyPrice = state.traderUnlocked
+    ? Math.round((weatherPrice * (1 - TRADER_MARKET_DISCOUNT)) / 5) * 5
+    : weatherPrice;
 
   const base = MARKET_BASE_PRICES[part.rarity];
   const todayStr = today();
@@ -103,8 +115,8 @@ export async function POST(req: Request) {
     if (unlocked.includes(partId)) {
       return NextResponse.json({ error: "すでに所持しています" }, { status: 400 });
     }
-    if (state.gcoins < effectivePrice) {
-      return NextResponse.json({ error: `Gコインが不足しています (必要: ${effectivePrice}G)` }, { status: 400 });
+    if (state.gcoins < buyPrice) {
+      return NextResponse.json({ error: `Gコインが不足しています (必要: ${buyPrice}G)` }, { status: 400 });
     }
 
     const newTotalBought = priceRow.totalBought + 1;
@@ -116,7 +128,7 @@ export async function POST(req: Request) {
       prisma.optisState.update({
         where: { id: state.id },
         data: {
-          gcoins: state.gcoins - effectivePrice,
+          gcoins: state.gcoins - buyPrice,
           unlockedParts: JSON.stringify([...unlocked, partId]),
         },
       }),
@@ -126,7 +138,7 @@ export async function POST(req: Request) {
       }),
     ]);
 
-    return NextResponse.json({ ok: true, paid: effectivePrice, newPrice });
+    return NextResponse.json({ ok: true, paid: buyPrice, newPrice });
   }
 
   if (action === "SELL") {
@@ -138,7 +150,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "装備中のパーツは売却できません" }, { status: 400 });
     }
 
-    const sellPrice = marketSellPrice(effectivePrice);
+    const sellPrice = marketSellPrice(weatherPrice);
     const newTotalSold = priceRow.totalSold + 1;
     const newPrice = computeMarketPrice(base, priceRow.totalBought, newTotalSold);
     const history = (priceRow.history as { date: string; price: number }[]).slice(-29);

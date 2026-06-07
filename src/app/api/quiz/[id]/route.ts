@@ -48,6 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       expGained,
       responseMs: responseMs ?? null,
       layer: profile.layer,
+      genre: quiz.genre,
+      questionText: quiz.question,
     },
   });
 
