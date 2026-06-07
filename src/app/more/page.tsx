@@ -10,6 +10,8 @@ const items = [
   { href: "/chores", label: "お手伝い設定", icon: "📋", desc: "お手伝いの種類とスケジュール" },
   { href: "/allowance", label: "おこづかい集計", icon: "💰", desc: "期間ごとの集計・支払い管理" },
   { href: "/stats", label: "統計", icon: "📊", desc: "お手伝いの達成率・推移" },
+  { href: "/chronicle", label: "メモリー・タイムカプセル", icon: "🏛️", desc: "進化の系譜・知の保存庫(復習)" },
+  { href: "/portfolio", label: "未来へのポートフォリオ", icon: "📤", desc: "自己投資・実績データをPDF/CSV出力" },
   { href: "/parent", label: "親ビュー", icon: "👪", desc: "残高・支出割合の確認、おねだり承認", parentOnly: true },
   { href: "/settings", label: "設定", icon: "⚙️", desc: "基本お小遣い・集計期間" },
 ];

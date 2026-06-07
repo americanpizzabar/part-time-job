@@ -460,3 +460,13 @@ model MercariSale {
   date      String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
 }
+
+// ─── バックアップ・スナップショット(復元コード方式) ────────────────────────
+model BackupSnapshot {
+  id          Int      @id @default(autoincrement())
+  payload     String   // 全状態のJSONスナップショット
+  restoreCode String?  @unique // 親発行の復元コード(英数6桁)
+  note        String?  // ラベル(例: "機種変更前")
+  issuedBy    String   @default("PARENT") // PARENT | AUTO
+  createdAt   DateTime @default(now())
+}

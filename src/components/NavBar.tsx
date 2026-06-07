@@ -11,7 +11,7 @@ const links = [
   { href: "/more", label: "メニュー", icon: "☰" },
 ];
 
-const moreRoutes = ["/tasks", "/collection", "/projects", "/chores", "/allowance", "/stats", "/settings", "/parent"];
+const moreRoutes = ["/tasks", "/collection", "/projects", "/chores", "/allowance", "/stats", "/settings", "/parent", "/chronicle", "/portfolio"];
 
 export default function NavBar() {
   const pathname = usePathname();
