@@ -247,3 +247,17 @@ body {
   100% { transform: translateX(120%); }
 }
 .streak { animation: streak 1.1s ease-in-out infinite; }
+
+/* ===== 印刷 (ポートフォリオPDF) ===== */
+@media print {
+  body {
+    background: #ffffff;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .report {
+    box-shadow: none !important;
+  }
+}

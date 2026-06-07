@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { STATUS_LABELS, STATUS_COLORS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
@@ -151,6 +152,9 @@ export default function ParentPage() {
   const [kwDate, setKwDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [kwPosting, setKwPosting] = useState(false);
   const [kwMsg, setKwMsg] = useState("");
+  const [backupInfo, setBackupInfo] = useState<{lastBackupAt:string|null;count:number;hasRestoreCode:boolean;autoSync:boolean;serverTime:string} | null>(null);
+  const [restoreCode, setRestoreCode] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
@@ -180,6 +184,7 @@ export default function ParentPage() {
       fetch("/api/learning/settings").then(r => r.json()).then(setLearnSettings).catch(() => {});
       fetch("/api/learning/history").then(r => r.json()).then(setHistory).catch(() => {});
       fetch("/api/learning/accuracy").then(r => r.json()).then(setAccuracy).catch(() => {});
+      fetch("/api/backup").then(r=>r.json()).then(setBackupInfo).catch(()=>{});
     } finally {
       setLoading(false);
     }
@@ -329,6 +334,23 @@ export default function ParentPage() {
   async function updateLearnSettings(patch: Partial<{genreCurrent:boolean;genreEconomy:boolean;genreEnglish:boolean;genreLogic:boolean;levelCap:number}>) {
     await fetch("/api/learning/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch) });
     fetch("/api/learning/settings").then(r=>r.json()).then(setLearnSettings).catch(()=>{});
+  }
+
+  async function issueRestoreCode() {
+    setBackupBusy(true);
+    try {
+      const res = await fetch("/api/backup", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ note:"親発行", issueCode:true }) });
+      const data = await res.json();
+      setRestoreCode(data.restoreCode ?? null);
+      fetch("/api/backup").then(r=>r.json()).then(setBackupInfo).catch(()=>{});
+    } finally { setBackupBusy(false); }
+  }
+
+  function formatBackupDate(s: string | null): string {
+    if (!s) return "まだありません";
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleString("ja-JP");
   }
 
   async function postBoost() {
@@ -1104,6 +1126,61 @@ export default function ParentPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* ─── データ保存・バックアップ ─── */}
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
+            <h2 className="font-bold text-gray-800">🔒 データ保存・バックアップ</h2>
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-emerald-600">✅ クラウド自動保存：有効</div>
+              <div className="text-sm text-gray-700">
+                最終バックアップ: {formatBackupDate(backupInfo?.lastBackupAt ?? null)}
+              </div>
+              <p className="text-xs text-gray-400">
+                すべてのデータはサーバー側にタイムスタンプ付きで保存されます（端末内には保存されないため改ざんできません）。
+              </p>
+            </div>
+
+            <div>
+              <button
+                onClick={issueRestoreCode}
+                disabled={backupBusy}
+                className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40"
+              >
+                {backupBusy ? "発行中…" : "🔑 復元コードを発行"}
+              </button>
+              {restoreCode && (
+                <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-200 p-4 text-center space-y-2">
+                  <div className="text-xs text-indigo-500">復元コード</div>
+                  <div className="text-3xl font-bold tracking-widest text-indigo-700 select-all">{restoreCode}</div>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(restoreCode)}
+                    className="bg-white border border-indigo-300 text-indigo-600 rounded-lg px-3 py-1.5 text-xs font-bold"
+                  >
+                    📋 コピー
+                  </button>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    機種変更・紛失時はお子様の端末でこのコードを入力すると、育てたOptisを復元できます。
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <a
+                href="/api/export/csv?range=all"
+                className="block text-center bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-bold"
+              >
+                ⬇️ ライフデータをCSV出力
+              </a>
+              <Link
+                href="/portfolio"
+                className="block text-center bg-violet-600 text-white rounded-xl py-2.5 text-sm font-bold"
+              >
+                📤 ポートフォリオ(PDF)を作成
+              </Link>
+            </div>
           </div>
         </>
       )}
