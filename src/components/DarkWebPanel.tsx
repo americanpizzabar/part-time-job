@@ -77,7 +77,7 @@ interface QuizStatus {
   shieldUntil: string | null;
 }
 
-type Tab = "matrix" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
+type Tab = "matrix" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
 
 function calcPriceHack(nowPrice: number, waitMonths: number, dropPct: number) {
   const future = Math.round(nowPrice * (1 - dropPct / 100));
@@ -135,6 +135,11 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [langMsg, setLangMsg] = useState("");
   const [missions, setMissions] = useState<{id:number;word:string;translation:string;choices:string[];correctIndex:number;hint:string;expReward:number;isActive:boolean;solvedAt:string|null}[]>([]);
   const [missionResult, setMissionResult] = useState<{id:number;correct:boolean;word:string;translation:string} | null>(null);
+  // ORACLE (神託) — 総資産 & 未来予測
+  const [balance, setBalance] = useState<{ wallet: number; free: number; saved: number } | null>(null);
+  const [mercari, setMercari] = useState<{ total: number } | null>(null);
+  const [projMonthly, setProjMonthly] = useState("2000");
+  const [projYears, setProjYears] = useState("10");
 
   const load = () => {
     fetch("/api/optis").then(r => r.json()).then(setState);
@@ -147,6 +152,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/fund").then(r => r.json()).then(setFund);
     fetch("/api/quiz").then(r => r.json()).then(setQuizStatus);
     fetch("/api/wordmission").then(r => r.json()).then(setMissions).catch(() => {});
+    fetch("/api/balance").then(r => r.json()).then(setBalance).catch(() => {});
+    fetch("/api/mercari").then(r => r.json()).then(setMercari).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -281,9 +288,37 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   }
 
   const TABS: [Tab, string][] = [
-    ["matrix", "MATRIX"], ["market", "MARKET"], ["quiz", "QUIZ"], ["brain", "BRAIN"], ["feed", "FEED"],
-    ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
+    ["matrix", "MATRIX"], ["oracle", "ORACLE"], ["market", "MARKET"], ["quiz", "QUIZ"], ["brain", "BRAIN"],
+    ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
   ];
+
+  // ── ORACLE 計算: 総資産(リアルマネー) & 複利による未来予測 ──
+  const bankActiveTotal = (bankData?.deposits ?? [])
+    .filter(d => d.status === "ACTIVE")
+    .reduce((s, d) => s + d.principal, 0);
+  const cash = balance?.wallet ?? 0;
+  const fundValue = fund?.currentValue ?? 0;
+  const mercariTotal = mercari?.total ?? 0;
+  const netWorth = cash + fundValue + bankActiveTotal;
+  const netWorthParts = [
+    { label: "現金(財布)", value: cash, color: "#22d3ee" },
+    { label: "ファンド評価額", value: fundValue, color: "#818cf8" },
+    { label: "銀行(運用中)", value: bankActiveTotal, color: "#fbbf24" },
+  ].filter(p => p.value > 0);
+
+  const projAnnualRate = fund?.baseReturnRate ?? 5;
+  const projMonths = Math.max(0, Math.min(50, Number(projYears) || 0)) * 12;
+  const projMonthlyAmt = Math.max(0, Number(projMonthly) || 0);
+  const monthlyRate = projAnnualRate / 100 / 12;
+  const yearlyValues: number[] = [];
+  let projVal = netWorth;
+  for (let m = 1; m <= projMonths; m++) {
+    projVal = projVal * (1 + monthlyRate) + projMonthlyAmt;
+    if (m % 12 === 0) yearlyValues.push(Math.round(projVal));
+  }
+  const projFuture = Math.round(projVal);
+  const projContributed = netWorth + projMonthlyAmt * projMonths;
+  const projGrowth = Math.max(0, projFuture - projContributed);
 
   const buyable = market?.listings.filter(l => !l.owned).sort((a, b) => a.currentPrice - b.currentPrice) ?? [];
   const sellable = market?.listings.filter(l => l.owned && !l.equipped) ?? [];
@@ -409,6 +444,104 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── ORACLE ───────────────────────────────────────────── */}
+        {tab === "oracle" && (
+          <div className="space-y-4">
+            {/* 総資産 */}
+            <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-cyan-500 tracking-widest mb-1">// NET_WORTH — 総資産スキャン</div>
+              <div className="text-[10px] text-cyan-700 mb-3">現金・ファンド・銀行を合算したリアルマネー総額</div>
+              <div className="text-center mb-4">
+                <div className="text-cyan-600 text-[10px] tracking-widest">TOTAL ASSETS</div>
+                <div className="text-cyan-200 text-4xl font-black" style={{ textShadow: "0 0 12px #22d3ee" }}>
+                  {formatJPY(netWorth)}
+                </div>
+              </div>
+              {netWorthParts.length > 0 ? (
+                <div className="space-y-2">
+                  {netWorthParts.map(p => (
+                    <div key={p.label} className="font-mono">
+                      <div className="flex justify-between text-xs" style={{ color: p.color }}>
+                        <span>{p.label}</span>
+                        <span>{formatJPY(p.value)} ({Math.round(p.value / Math.max(1, netWorth) * 100)}%)</span>
+                      </div>
+                      <div className="h-1.5 bg-cyan-900/40 rounded mt-0.5">
+                        <div className="h-full rounded" style={{ width: `${p.value / Math.max(1, netWorth) * 100}%`, backgroundColor: p.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-cyan-700 text-xs font-mono text-center py-2">資産データなし</div>
+              )}
+              {mercariTotal > 0 && (
+                <div className="text-[10px] text-amber-500/80 font-mono mt-3 pt-2 border-t border-cyan-900/40">
+                  ◈ うち自分で稼いだ額(メルカリ累計): {formatJPY(mercariTotal)}
+                </div>
+              )}
+            </div>
+
+            {/* 未来予測 */}
+            <div className="border border-fuchsia-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-fuchsia-400 tracking-widest mb-1">// FUTURE_ORACLE — 複利の未来予測</div>
+              <div className="text-[10px] text-fuchsia-700 mb-3">
+                今の総資産に毎月積み立て、年利{projAnnualRate}%で複利運用したら…
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <div className="text-[10px] text-fuchsia-600 mb-1">毎月の積立(円)</div>
+                  <input type="number" value={projMonthly} onChange={e => setProjMonthly(e.target.value)}
+                    className="w-full bg-black/40 border border-fuchsia-700/50 text-fuchsia-100 rounded px-2 py-1.5 text-sm focus:outline-none" min={0} placeholder="2000" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-fuchsia-600 mb-1">運用年数</div>
+                  <input type="number" value={projYears} onChange={e => setProjYears(e.target.value)}
+                    className="w-full bg-black/40 border border-fuchsia-700/50 text-fuchsia-100 rounded px-2 py-1.5 text-sm focus:outline-none" min={1} max={50} placeholder="10" />
+                </div>
+              </div>
+
+              <div className="bg-black/30 border border-fuchsia-800/40 rounded-lg p-3 font-mono">
+                <div className="text-center mb-3">
+                  <div className="text-fuchsia-500 text-[10px]">{projYears || 0}年後の予測資産</div>
+                  <div className="text-fuchsia-200 text-3xl font-black" style={{ textShadow: "0 0 10px #e879f9" }}>
+                    {formatJPY(projFuture)}
+                  </div>
+                </div>
+
+                {yearlyValues.length >= 2 && (
+                  <div className="flex justify-center mb-3">
+                    <Sparkline prices={[netWorth, ...yearlyValues]} color="#e879f9" />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-cyan-400">
+                      <span>積み立てた元本</span><span>{formatJPY(projContributed)}</span>
+                    </div>
+                    <div className="h-2 bg-cyan-900/40 rounded">
+                      <div className="h-full rounded bg-cyan-500" style={{ width: `${projContributed / Math.max(1, projFuture) * 100}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-emerald-400">
+                      <span>複利で増えた額 ✨</span><span>+{formatJPY(projGrowth)}</span>
+                    </div>
+                    <div className="h-2 bg-emerald-900/40 rounded">
+                      <div className="h-full rounded bg-emerald-400" style={{ width: `${projGrowth / Math.max(1, projFuture) * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-fuchsia-600/80 mt-3 leading-relaxed">
+                ◈ お金がお金を生む「複利」のチカラ。早く始めるほど、増えた額(緑)が大きくなる。これが投資の神託だ。
+              </div>
             </div>
           </div>
         )}

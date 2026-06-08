@@ -33,13 +33,8 @@ export async function POST(req: Request) {
   const state = await getOptisState();
   const todayStr = today();
 
-  // 1. Record the sale
-  await prisma.mercariSale.create({
-    data: { itemName: itemName ?? null, amount, date: todayStr },
-  });
-
-  // 2. Record income transaction
-  await prisma.transaction.create({
+  // 1. Record income transaction
+  const tx = await prisma.transaction.create({
     data: {
       type: "INCOME",
       amount,
@@ -47,6 +42,11 @@ export async function POST(req: Request) {
       memo: "メルカリ売上" + (itemName ? `: ${itemName}` : ""),
       source: "MERCARI",
     },
+  });
+
+  // 2. Record the sale (linked to the income transaction)
+  await prisma.mercariSale.create({
+    data: { itemName: itemName ?? null, amount, date: todayStr, transactionId: tx.id },
   });
 
   // 3. EXP award (capped 200 per sale)

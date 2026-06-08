@@ -156,6 +156,12 @@ export default function TasksPage() {
   function handleToday() {
     setOffset(0);
   }
+  function handleLastWeek() {
+    setRangeIndex(2); // 1週間
+    setOffset(-1);
+  }
+
+  const isLastWeek = rangeIndex === 2 && offset === -1;
 
   return (
     <div className="space-y-4">
@@ -199,12 +205,19 @@ export default function TasksPage() {
               key={i}
               onClick={() => { setRangeIndex(i); setOffset(0); }}
               className={`px-2.5 py-1.5 rounded-md text-sm font-medium transition-all
-                ${rangeIndex === i ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                ${rangeIndex === i && offset === 0 ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
             >
               {label}
             </button>
           ))}
         </div>
+        <button
+          onClick={handleLastWeek}
+          className={`px-2.5 py-1.5 rounded-md text-sm font-medium border transition-all
+            ${isLastWeek ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+        >
+          先週
+        </button>
         {offset !== 0 && (
           <button
             onClick={handleToday}

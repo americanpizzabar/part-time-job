@@ -458,6 +458,7 @@ model MercariSale {
   itemName  String?  // 売れた商品名(任意)
   amount    Int      // 売上金額(円)
   date      String   // "YYYY-MM-DD"
+  transactionId Int? // 紐づく収入トランザクション(編集・削除時に同期)
   createdAt DateTime @default(now())
 }
 

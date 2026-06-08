@@ -102,6 +102,8 @@ export default function OptisLabPage() {
   const [mercariBurst, setMercariBurst] = useState(false);
   const [mercariForm, setMercariForm] = useState({ amount: "", itemName: "" });
   const [mercariSaving, setMercariSaving] = useState(false);
+  const [mercariSales, setMercariSales] = useState<{ id: number; itemName: string | null; amount: number; date: string }[]>([]);
+  const [editingSale, setEditingSale] = useState<{ id: number; amount: string; itemName: string } | null>(null);
   const [traderCelebration, setTraderCelebration] = useState(false);
   const [monthTx, setMonthTx] = useState<MonthTransaction[]>([]);
   const [syncAccuracy, setSyncAccuracy] = useState(0);
@@ -326,6 +328,41 @@ export default function OptisLabPage() {
     fetchAll();
   }
 
+  async function loadMercari() {
+    try {
+      const data = await fetch("/api/mercari").then(r => r.json());
+      setMercariSales(Array.isArray(data?.sales) ? data.sales : []);
+    } catch { /* ignore */ }
+  }
+
+  function openMercari() {
+    setShowMercari(true);
+    setEditingSale(null);
+    loadMercari();
+  }
+
+  async function saveEditSale() {
+    if (!editingSale) return;
+    const amount = Number(editingSale.amount);
+    if (!amount || amount <= 0) return;
+    await fetch(`/api/mercari/${editingSale.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, itemName: editingSale.itemName || undefined }),
+    });
+    setEditingSale(null);
+    await loadMercari();
+    fetchAll();
+  }
+
+  async function deleteSale(id: number) {
+    if (!confirm("この売上記録を削除しますか？累計と収入からも差し引かれます。")) return;
+    await fetch(`/api/mercari/${id}`, { method: "DELETE" });
+    if (editingSale?.id === id) setEditingSale(null);
+    await loadMercari();
+    fetchAll();
+  }
+
   async function submitMercari() {
     const amount = Number(mercariForm.amount);
     if (!amount || amount <= 0) return;
@@ -351,6 +388,7 @@ export default function OptisLabPage() {
         if (data.justUnlockedTrader) {
           setTraderCelebration(true);
         }
+        await loadMercari();
         await fetchAll();
       } else {
         alert(data.error ?? "保存に失敗しました");
@@ -650,7 +688,7 @@ export default function OptisLabPage() {
           </div>
         </Link>
         <button
-          onClick={() => setShowMercari(true)}
+          onClick={openMercari}
           className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 text-left hover:border-amber-300"
         >
           <span className="text-2xl">🛒</span>
@@ -717,7 +755,7 @@ export default function OptisLabPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setShowMercari(false)} className="flex-1 border border-amber-400/40 text-amber-200 rounded-xl py-2.5 font-semibold">
-                キャンセル
+                閉じる
               </button>
               <button
                 onClick={submitMercari}
@@ -727,6 +765,77 @@ export default function OptisLabPage() {
               >
                 {mercariSaving ? "記録中…" : "売上を記録"}
               </button>
+            </div>
+
+            {/* 過去の売上履歴 (閲覧・編集・削除) */}
+            <div className="pt-3 border-t border-amber-400/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-amber-300/80">売上の記録</span>
+                <span className="text-[10px] text-amber-400/60">
+                  累計 {formatJPY(optis.mercariTotal ?? 0)}
+                </span>
+              </div>
+              {mercariSales.length === 0 ? (
+                <p className="text-xs text-amber-300/40 text-center py-3">まだ記録がありません</p>
+              ) : (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  {mercariSales.map(sale => (
+                    editingSale?.id === sale.id ? (
+                      <div key={sale.id} className="bg-black/40 border border-amber-300/50 rounded-xl p-2.5 space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            className="w-24 bg-black/40 border border-amber-400/40 rounded-lg px-2 py-1.5 text-sm text-amber-100 focus:outline-none focus:border-amber-300"
+                            value={editingSale.amount}
+                            onChange={e => setEditingSale({ ...editingSale, amount: e.target.value })}
+                          />
+                          <input
+                            className="flex-1 min-w-0 bg-black/40 border border-amber-400/40 rounded-lg px-2 py-1.5 text-sm text-amber-100 focus:outline-none focus:border-amber-300"
+                            placeholder="商品名(任意)"
+                            value={editingSale.itemName}
+                            onChange={e => setEditingSale({ ...editingSale, itemName: e.target.value })}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingSale(null)} className="flex-1 text-xs text-amber-300/70 border border-amber-400/30 rounded-lg py-1.5">
+                            やめる
+                          </button>
+                          <button
+                            onClick={saveEditSale}
+                            disabled={!editingSale.amount || Number(editingSale.amount) <= 0}
+                            className="flex-1 text-xs font-bold text-amber-950 rounded-lg py-1.5 disabled:opacity-40"
+                            style={{ background: "linear-gradient(90deg,#fbbf24,#f59e0b)" }}
+                          >
+                            保存
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={sale.id} className="flex items-center gap-2 bg-black/30 border border-amber-400/20 rounded-xl px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-amber-100">{formatJPY(sale.amount)}</div>
+                          <div className="text-[10px] text-amber-400/60 truncate">
+                            {sale.date}{sale.itemName ? ` ・ ${sale.itemName}` : ""}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setEditingSale({ id: sale.id, amount: String(sale.amount), itemName: sale.itemName ?? "" })}
+                          className="text-[11px] text-amber-300 border border-amber-400/30 rounded-lg px-2 py-1"
+                        >
+                          編集
+                        </button>
+                        <button
+                          onClick={() => deleteSale(sale.id)}
+                          className="text-[11px] text-red-300 border border-red-400/30 rounded-lg px-2 py-1"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    )
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
