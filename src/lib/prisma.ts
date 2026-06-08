@@ -21,6 +21,16 @@ function createPrisma() {
   return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrisma();
+function getOrInitPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrisma();
+  }
+  return globalForPrisma.prisma;
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Lazy proxy: defers DB connection until first query — safe at build time
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_, prop) {
+    return Reflect.get(getOrInitPrisma(), prop);
+  },
+});

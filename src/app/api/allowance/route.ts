@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isChoreScheduledForDate, getDateRange } from "@/lib/dateUtils";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const periods = await prisma.allowancePeriod.findMany({
     orderBy: { startDate: "desc" },
