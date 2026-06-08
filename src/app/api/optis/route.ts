@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { today } from "@/lib/dateUtils";
 import { getOptisState, parseUnlocked, computeDerived, detectNmdFraud } from "@/lib/optisServer";
-import { getPart } from "@/lib/optis";
+import { getPart, creditRank } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +66,7 @@ export async function GET() {
     freezeUntil: state.freezeUntil,
     langMode: state.langMode,
     hasQuizShield,
+    creditRank: creditRank(state.creditScore),
     ...derived,
     archive: {
       resistedTotal,

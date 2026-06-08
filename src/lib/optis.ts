@@ -477,6 +477,50 @@ export const WEATHER_META: Record<WeatherType, { label: string; emoji: string; c
   RATE_HIKE: { label: "利上げ",      emoji: "🏦", color: "#8b5cf6", marketMultiplier: 1.05, desc: "金利上昇。銀行の利息が増加" },
 };
 
+// ─── 動的な経済ウェザー(自動ローテーション) ───────────────────────────
+// 文字列シードの決定論的擬似乱数(FNV-1a)。並行GETでも同じ結果になる。
+export function seededInt(seed: string, mod: number): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % Math.max(1, mod);
+}
+
+export const WEATHER_TYPES: WeatherType[] = ["NEUTRAL", "INFLATION", "DEFLATION", "YEN_STRONG", "YEN_WEAK", "RATE_HIKE"];
+export const WEATHER_MIN_DAYS = 2;
+export const WEATHER_MAX_DAYS = 4;
+
+// シードからウェザーを決定(type / 深刻度 / 継続日数)。同じシードなら必ず同じ結果。
+export function rollWeather(seed: string): { type: WeatherType; magnitude: number; days: number } {
+  const type = WEATHER_TYPES[seededInt(seed + ":type", WEATHER_TYPES.length)];
+  const magnitude = Math.round((0.6 + seededInt(seed + ":mag", 18) / 10) * 100) / 100; // 0.6 .. 2.3
+  const days = WEATHER_MIN_DAYS + seededInt(seed + ":days", WEATHER_MAX_DAYS - WEATHER_MIN_DAYS + 1);
+  return { type, magnitude, days };
+}
+
+// magnitude を 1.0 を軸に増幅した「有効倍率」。
+// weather と market が必ず同じ値を使う唯一の関数(整合の単一化)。
+export function effectiveWeatherMultiplier(type: WeatherType, magnitude: number): number {
+  const base = (WEATHER_META[type] ?? WEATHER_META.NEUTRAL).marketMultiplier;
+  const m = Math.max(0.25, Math.min(3, magnitude || 1));
+  const scaled = 1 + (base - 1) * m; // NEUTRAL(base=1.0)は常に1.0
+  return Math.round(Math.max(0.5, Math.min(2.0, scaled)) * 100) / 100;
+}
+
+// ─── 信用ランク(creditScore → 実特典) ────────────────────────────────
+export interface CreditRankInfo { tier: number; label: string; marketDiscount: number; forecastDiscount: number }
+export function creditRank(score: number): CreditRankInfo {
+  if (score >= 90) return { tier: 4, label: "信用ランクS / PLATINUM", marketDiscount: 0.20, forecastDiscount: 0.50 };
+  if (score >= 70) return { tier: 3, label: "信用ランクA / GOLD",     marketDiscount: 0.10, forecastDiscount: 0.25 };
+  if (score >= 40) return { tier: 2, label: "信用ランクB / SILVER",   marketDiscount: 0.05, forecastDiscount: 0.00 };
+  return            { tier: 1, label: "信用ランクC / BRONZE",         marketDiscount: 0.00, forecastDiscount: 0.00 };
+}
+
+// 経済予報(INTEL BROKER)の基本コスト(知性ポイント)
+export const FORECAST_WISDOM_COST = 15;
+
 export const QUIZ_SHIELD_DAYS = 7;
 export const QUIZ_CORRECT_EXP = 50;
 export const EN_MODE_EXP_MULTIPLIER = 1.5;

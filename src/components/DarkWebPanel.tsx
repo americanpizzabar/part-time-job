@@ -2,14 +2,21 @@
 
 import { useEffect, useState, useRef } from "react";
 import { formatJPY } from "@/lib/dateUtils";
-import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType } from "@/lib/optis";
+import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType, creditRank } from "@/lib/optis";
 import GuildPanel from "@/components/GuildPanel";
 import CodeRain from "@/components/CodeRain";
 
 interface DarkWebPanelProps {
-  optis: { level: number; intoLevel: number; needed: number; experience: number; creditScore: number; gcoins?: number; generation?: number; langMode?: string; hasQuizShield?: boolean };
+  optis: { level: number; intoLevel: number; needed: number; experience: number; creditScore: number; gcoins?: number; wisdomPoints?: number; generation?: number; langMode?: string; hasQuizShield?: boolean };
   onExit: () => void;
   onChanged: () => void;
+}
+
+interface ForecastData {
+  wisdomPoints: number;
+  cost: number;
+  purchased: boolean;
+  upcoming: { type: WeatherType; magnitude: number; meta: { label: string; emoji: string; color: string; desc: string }; effectiveMultiplier: number } | null;
 }
 
 interface FullState {
@@ -52,6 +59,9 @@ interface MarketData {
   activeWeather: { type: string; description: string } | null;
   weatherMultiplier: number;
   hasShield: boolean;
+  buyDiscount?: number;
+  discountSource?: "trader" | "credit" | null;
+  rank?: { tier: number; label: string; marketDiscount: number };
 }
 
 interface FeedItem {
@@ -155,6 +165,9 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [mercari, setMercari] = useState<{ total: number } | null>(null);
   const [projMonthly, setProjMonthly] = useState("2000");
   const [projYears, setProjYears] = useState("10");
+  // INTEL BROKER (経済予報)
+  const [forecast, setForecast] = useState<ForecastData | null>(null);
+  const [forecastMsg, setForecastMsg] = useState("");
   // DECODE (データ解読)
   const [decode, setDecode] = useState<DecodeMission[]>([]);
   const [decodeResult, setDecodeResult] = useState<{ id: number; correct: boolean; explanation: string; expGained?: number; gcoinGained?: number; unlockedPart?: { name: string; emoji?: string } | null } | null>(null);
@@ -183,6 +196,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/decode").then(r => r.json()).then(d => setDecode(Array.isArray(d) ? d : [])).catch(() => {});
     fetch("/api/learning").then(r => r.json()).then(setLearning).catch(() => {});
     fetch("/api/drop").then(r => r.json()).then(setDrop).catch(() => {});
+    fetch("/api/forecast").then(r => r.json()).then(setForecast).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -221,6 +235,21 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
       setTimeout(() => { setDropOverlay(false); setDropReward(null); onExit(); }, 2800);
     } else {
       setDropOverlay(false);
+    }
+  }
+
+  async function buyForecast() {
+    const r = await fetch("/api/forecast", { method: "POST" });
+    const data = await r.json();
+    if (r.ok) {
+      setForecastMsg("");
+      fetch("/api/forecast").then(r => r.json()).then(setForecast).catch(() => {});
+      fetch("/api/market").then(r => r.json()).then(setMarket).catch(() => {});
+      load();
+      onChanged();
+    } else {
+      setForecastMsg(data.error ?? "予報の購入に失敗しました");
+      setTimeout(() => setForecastMsg(""), 3000);
     }
   }
 
@@ -723,6 +752,59 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 ◈ お金がお金を生む「複利」のチカラ。早く始めるほど、増えた額(緑)が大きくなる。これが投資の神託だ。
               </div>
             </div>
+
+            {/* INTEL BROKER — 経済予報(知性ポイントで先読み) */}
+            <div className="border border-emerald-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-emerald-400 tracking-widest mb-1">// INTEL_BROKER — 経済予報</div>
+              <div className="text-[10px] text-emerald-700 mb-3 leading-relaxed">
+                知性ポイントを払えば、次に来る経済ウェザーを先読みできる。安い時に買い、高い時に売る計画を立てろ。
+              </div>
+              <div className="flex items-baseline justify-between mb-3">
+                <div className="text-emerald-600 text-[10px]">WISDOM_POINTS</div>
+                <div className="text-emerald-300 text-2xl font-black">{forecast?.wisdomPoints ?? optis.wisdomPoints ?? 0} <span className="text-xs">pt</span></div>
+              </div>
+
+              {forecastMsg && (
+                <div className="text-xs text-red-300 bg-red-900/30 border border-red-700/30 rounded-lg p-2 mb-3">{forecastMsg}</div>
+              )}
+
+              {forecast?.purchased && forecast.upcoming ? (
+                <div className="bg-black/30 border border-emerald-800/40 rounded-lg p-3">
+                  <div className="text-[10px] text-emerald-600 mb-1">// NEXT_WEATHER — 解読済み</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{forecast.upcoming.meta.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm" style={{ color: forecast.upcoming.meta.color }}>{forecast.upcoming.meta.label}</div>
+                      <div className="text-[10px] text-gray-500">{forecast.upcoming.meta.desc}</div>
+                    </div>
+                    <div className="text-right font-mono">
+                      <div className="text-[9px] text-emerald-600">市場価格</div>
+                      <div className="text-sm font-bold" style={{ color: forecast.upcoming.effectiveMultiplier > 1 ? "#f87171" : forecast.upcoming.effectiveMultiplier < 1 ? "#34d399" : "#94a3b8" }}>
+                        ×{forecast.upcoming.effectiveMultiplier.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[11px] text-emerald-300 bg-emerald-900/20 border border-emerald-700/30 rounded-lg p-2">
+                    {forecast.upcoming.effectiveMultiplier > 1.02
+                      ? "📈 値上がり予報。欲しいパーツは今のうちに買っておけ。"
+                      : forecast.upcoming.effectiveMultiplier < 0.98
+                      ? "📉 値下がり予報。買うのは次の窓まで待て。売るなら今だ。"
+                      : "➖ 価格は安定の見込み。落ち着いて取引しろ。"}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={buyForecast}
+                  disabled={!forecast || forecast.wisdomPoints < forecast.cost}
+                  className="w-full rounded-lg py-2.5 text-sm font-bold border border-emerald-500/50 text-emerald-200 bg-emerald-900/30 hover:bg-emerald-800/40 disabled:opacity-30 transition-colors"
+                >
+                  ▸ 次のウェザーを解読する(−{forecast?.cost ?? "?"} 知性pt)
+                </button>
+              )}
+              {forecast && !forecast.purchased && forecast.wisdomPoints < forecast.cost && (
+                <div className="text-[10px] text-emerald-700 mt-2 text-center">知性ポイントが足りない。キーワードをタップして貯めろ。</div>
+              )}
+            </div>
           </div>
         )}
 
@@ -736,6 +818,15 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 <div className="text-emerald-600 text-[10px]">G-COIN BALANCE</div>
                 <div className="text-emerald-300 text-2xl font-black">{gcoins} <span className="text-xs">G</span></div>
               </div>
+
+              {market && (market.buyDiscount ?? 0) > 0 && (
+                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-2 py-1.5 mb-3">
+                  ◈ 買値割引 -{Math.round((market.buyDiscount ?? 0) * 100)}%
+                  <span className="text-emerald-600 ml-1">
+                    ({market.discountSource === "credit" ? `信用ランク ${market.rank?.label ?? ""}` : "商人属性"})
+                  </span>
+                </div>
+              )}
 
               {market?.activeWeather && (
                 <div className="text-xs bg-red-900/30 border border-red-700/40 rounded-lg p-2 mb-3">
@@ -1234,6 +1325,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                   ["TOTAL_EXP", String(optis.experience)],
                   ["EXP_TO_NEXT", String(expRemain)],
                   ["G_COINS", `${gcoins}G`],
+                  ["WISDOM_PTS", `${forecast?.wisdomPoints ?? optis.wisdomPoints ?? 0}pt`],
                   ["GENERATION", `Gen.${generation}`],
                   ["LANG_MODE", langMode],
                 ].map(([k, v]) => (
@@ -1243,6 +1335,28 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                   </div>
                 ))}
               </div>
+
+              {/* 信用ランク — creditScore の実特典 */}
+              {(() => {
+                const rank = creditRank(optis.creditScore);
+                return (
+                  <div className="mt-4 pt-3 border-t border-cyan-900/40">
+                    <div className="text-[10px] text-emerald-500 tracking-widest mb-1">// CREDIT_RANK — 信用ランク</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-emerald-200 text-sm font-bold font-mono">{rank.label}</div>
+                      <div className="text-[10px] text-emerald-600 font-mono">SCORE {optis.creditScore}/100</div>
+                    </div>
+                    <div className="text-[11px] text-emerald-300/80 font-mono mt-1">
+                      マーケット買値 -{Math.round(rank.marketDiscount * 100)}% / 経済予報 -{Math.round(rank.forecastDiscount * 100)}%
+                    </div>
+                    {rank.tier < 4 && (
+                      <div className="text-[10px] text-emerald-700 mt-1">
+                        信用スコアを上げると割引UP(ノーマネーデー申告・成果報告・ローン完済で上昇)
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* ワン・ワード・ミッション */}
               <div className="mt-4 pt-3 border-t border-cyan-900/40">

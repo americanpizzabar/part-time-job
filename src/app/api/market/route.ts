@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
-import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WEATHER_META, WeatherType, TRADER_MARKET_DISCOUNT } from "@/lib/optis";
+import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WeatherType, TRADER_MARKET_DISCOUNT, effectiveWeatherMultiplier, creditRank } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -34,21 +34,23 @@ export async function GET() {
 
   let weatherMultiplier = 1.0;
   if (activeWeather && !hasShield) {
-    const meta = WEATHER_META[activeWeather.type as WeatherType];
-    if (meta) weatherMultiplier = meta.marketMultiplier;
+    weatherMultiplier = effectiveWeatherMultiplier(activeWeather.type as WeatherType, activeWeather.magnitude);
   }
 
   const traderUnlocked = state.traderUnlocked;
+  // 商人割引と信用ランク割引の大きい方を採用(加算スタックしない)
+  const rank = creditRank(state.creditScore);
+  const buyDiscount = Math.max(traderUnlocked ? TRADER_MARKET_DISCOUNT : 0, rank.marketDiscount);
+  const discountSource = buyDiscount === 0 ? null
+    : (rank.marketDiscount >= (traderUnlocked ? TRADER_MARKET_DISCOUNT : 0) && rank.marketDiscount > 0 ? "credit" : "trader");
 
   const listings = await Promise.all(
     PARTS.filter(p => p.id !== "body_core" && p.id !== "aura_basic").map(async (part) => {
       const priceRow = await getOrInitPrice(part.id);
       const baseRawPrice = priceRow?.currentPrice ?? MARKET_BASE_PRICES[part.rarity];
       const weatherPrice = Math.round((baseRawPrice * weatherMultiplier) / 5) * 5;
-      // Trader属性解放時は買値に15%割引を適用(売値は据え置き)
-      const currentPrice = traderUnlocked
-        ? Math.round((weatherPrice * (1 - TRADER_MARKET_DISCOUNT)) / 5) * 5
-        : weatherPrice;
+      // 買値に割引(商人 or 信用ランクの大きい方)を適用。売値は据え置き。
+      const currentPrice = Math.round((weatherPrice * (1 - buyDiscount)) / 5) * 5;
       const base = MARKET_BASE_PRICES[part.rarity];
       const priceDelta = currentPrice - base;
       return {
@@ -74,6 +76,9 @@ export async function GET() {
     hasShield,
     traderUnlocked,
     traderDiscount: TRADER_MARKET_DISCOUNT,
+    rank,
+    buyDiscount,
+    discountSource,
   });
 }
 
@@ -99,14 +104,13 @@ export async function POST(req: Request) {
   });
   let weatherMultiplier = 1.0;
   if (activeWeather && !shieldAttempt) {
-    const meta = WEATHER_META[activeWeather.type as WeatherType];
-    if (meta) weatherMultiplier = meta.marketMultiplier;
+    weatherMultiplier = effectiveWeatherMultiplier(activeWeather.type as WeatherType, activeWeather.magnitude);
   }
   const weatherPrice = Math.round((priceRow.currentPrice * weatherMultiplier) / 5) * 5;
-  // 買値はTrader属性解放時に15%割引。売値は割引なし。
-  const buyPrice = state.traderUnlocked
-    ? Math.round((weatherPrice * (1 - TRADER_MARKET_DISCOUNT)) / 5) * 5
-    : weatherPrice;
+  // 買値は割引(商人 or 信用ランクの大きい方)を適用。売値は割引なし。
+  const rank = creditRank(state.creditScore);
+  const buyDiscount = Math.max(state.traderUnlocked ? TRADER_MARKET_DISCOUNT : 0, rank.marketDiscount);
+  const buyPrice = Math.round((weatherPrice * (1 - buyDiscount)) / 5) * 5;
 
   const base = MARKET_BASE_PRICES[part.rarity];
   const todayStr = today();
