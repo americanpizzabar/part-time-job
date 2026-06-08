@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { formatJPY } from "@/lib/dateUtils";
 
 type Range = "1y" | "3y" | "all";
@@ -80,6 +80,8 @@ export default function PortfolioPage() {
   const [range, setRange] = useState<Range>("1y");
   const [data, setData] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -100,6 +102,45 @@ export default function PortfolioPage() {
 
   function downloadCsv() {
     window.location.href = `/api/export/csv?range=${range}`;
+  }
+
+  async function handleSavePdf() {
+    const el = reportRef.current;
+    if (!el) return;
+    setExporting(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      const ratio = pageW / imgW;
+      const totalH = imgH * ratio;
+      let remaining = totalH;
+      let srcY = 0;
+      while (remaining > 0) {
+        const sliceH = Math.min(pageH, remaining);
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = imgW;
+        sliceCanvas.height = sliceH / ratio;
+        const ctx = sliceCanvas.getContext("2d")!;
+        ctx.drawImage(canvas, 0, srcY / ratio, imgW, sliceH / ratio, 0, 0, imgW, sliceH / ratio);
+        const sliceData = sliceCanvas.toDataURL("image/png");
+        if (srcY > 0) pdf.addPage();
+        pdf.addImage(sliceData, "PNG", 0, 0, pageW, sliceH);
+        srcY += sliceH;
+        remaining -= sliceH;
+      }
+      pdf.save("portfolio.pdf");
+    } finally {
+      setExporting(false);
+    }
   }
 
   const summary = data?.summary ?? {};
@@ -154,10 +195,11 @@ export default function PortfolioPage() {
           </div>
           <div className="flex-1" />
           <button
-            onClick={() => window.print()}
-            className="bg-indigo-600 text-white rounded-xl px-4 py-2 text-sm font-bold active:scale-95 transition-transform"
+            onClick={handleSavePdf}
+            disabled={exporting || loading || !hasData}
+            className="bg-indigo-600 text-white rounded-xl px-4 py-2 text-sm font-bold active:scale-95 transition-transform disabled:opacity-50"
           >
-            🖨️ PDFで保存
+            {exporting ? "生成中…" : "📄 PDFで保存"}
           </button>
           <button
             onClick={downloadCsv}
@@ -180,7 +222,7 @@ export default function PortfolioPage() {
         </div>
       ) : (
         /* ===== Printable report ===== */
-        <div className="report bg-white text-gray-800 rounded-2xl shadow-sm print:shadow-none print:rounded-none p-6 sm:p-8 space-y-8 print:p-0">
+        <div ref={reportRef} className="report bg-white text-gray-800 rounded-2xl shadow-sm p-6 sm:p-8 space-y-8">
           {/* Title header */}
           <header className="text-center border-b border-gray-200 pb-5">
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight">

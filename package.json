@@ -16,6 +16,8 @@
     "@prisma/client": "^7.8.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "next": "16.2.6",
     "pg": "^8.21.0",
     "prisma": "^7.8.0",
