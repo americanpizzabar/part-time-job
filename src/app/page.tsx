@@ -360,22 +360,30 @@ export default function OptisLabPage() {
       const expense = allTx.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
       setBreakdown(prev => prev ? { ...prev, rows, total: income - expense, note: "全期間の収入 − 支出の合計", loading: false } : null);
     } else {
+      // saved = 積立の正味合計(引き出しは負なので自動的に相殺)
       const savedTotal = goals.reduce((s, g) => s + g.saved, 0);
+      // 財布残高を transactions から再計算(state キャッシュより正確)
+      const income = allTx.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+      const expense = allTx.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+      const wallet = income - expense;
+      const free = wallet - savedTotal;
       const rows: BreakdownRow[] = goals.flatMap(g =>
         g.contributions.map(c => ({
           id: `${g.id}-${c.id}`,
           date: c.date,
           label: g.name,
           sublabel: c.memo ?? undefined,
-          amount: c.amount,
-          positive: false,
+          // 積立(c.amount>0)=自由資金が減る=マイナス表示
+          // 引き出し(c.amount<0)=自由資金が戻る=プラス表示
+          amount: Math.abs(c.amount),
+          positive: c.amount < 0,
         }))
       ).sort((a, b) => b.date.localeCompare(a.date));
       setBreakdown(prev => prev ? {
         ...prev,
         rows,
-        total: balance?.free ?? 0,
-        note: `財布 ${formatJPY(balance?.wallet ?? 0)} − 貯金 ${formatJPY(savedTotal)}`,
+        total: free,
+        note: `財布 ${formatJPY(wallet)} − 貯金中 ${formatJPY(Math.max(0, savedTotal))}`,
         loading: false,
       } : null);
     }
