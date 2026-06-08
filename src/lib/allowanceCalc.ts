@@ -31,8 +31,15 @@ export async function calculateAllowance(
     orderBy: { createdAt: "desc" },
   });
 
+  // 無効化されたお手伝いでも、期間内に完了ログがあれば「稼いだお金」として集計する
+  // (無効化で過去に稼いだ分が消えないように)
   const chores = await prisma.chore.findMany({
-    where: { isActive: true },
+    where: {
+      OR: [
+        { isActive: true },
+        { logs: { some: { date: { gte: startDate, lte: endDate }, completed: true } } },
+      ],
+    },
     include: {
       schedules: { where: { isActive: true } },
       logs: { where: { date: { gte: startDate, lte: endDate }, completed: true } },

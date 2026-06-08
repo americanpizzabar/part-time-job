@@ -73,6 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     shieldUntil,
     expGained,
     layerChanged: calibration.layerChanged,
+    layerUp: calibration.layerUp,
     newLayer: calibration.newLayer,
     layerDialogue,
     accuracy: calibration.accuracy,

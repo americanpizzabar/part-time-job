@@ -56,7 +56,8 @@ export default function QuizBanner({ onAnswered }: QuizBannerProps) {
         expGained: data.expGained ?? 0,
       });
       if (data.layerChanged && data.layerDialogue) {
-        const layerLabel = data.newLayer !== undefined ? `⬆️ Layer ${data.newLayer}` : "";
+        const arrow = data.layerUp ? "⬆️" : "⬇️";
+        const layerLabel = data.newLayer !== undefined ? `${arrow} Layer ${data.newLayer}` : "";
         setLayerUpMsg(layerLabel ? `${layerLabel} — ${data.layerDialogue}` : data.layerDialogue);
       }
     } finally {

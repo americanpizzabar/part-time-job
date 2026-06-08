@@ -94,6 +94,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "amount is required" }, { status: 400 });
   }
 
+  // 財布残高(income - expense)を超える投資は不可
+  const txs = await prisma.transaction.findMany({ select: { type: true, amount: true } });
+  const wallet = txs.reduce((s, t) => s + (t.type === "INCOME" ? t.amount : -t.amount), 0);
+  if (amount > wallet) {
+    return NextResponse.json(
+      { error: `残高が不足しています(財布: ${wallet.toLocaleString()}円)` },
+      { status: 400 }
+    );
+  }
+
   const todayStr = today();
   const fund = await getOrCreateFund();
 

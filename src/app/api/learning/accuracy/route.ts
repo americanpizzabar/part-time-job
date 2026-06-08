@@ -16,7 +16,7 @@ export async function GET() {
     const total = rows.length;
     const correct = rows.filter((a) => a.correct).length;
     const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
-    return { genre, label: GENRE_META[genre].label, total, correct, accuracy };
+    return { genre, label: GENRE_META[genre]?.label ?? genre, total, correct, accuracy };
   });
 
   const total = attempts.length;

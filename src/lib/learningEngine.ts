@@ -60,8 +60,9 @@ export async function calibrateAfterAnswer(
     newRate = Math.max(0.05, currentRate - 0.04);
   }
 
-  // Parent alert: first time reaching layer 2
-  const shouldAlert = layerChanged && newLayer === 2 && !parentAlertAt;
+  const layerUp = layerChanged && newLayer > currentLayer;
+  // Parent alert: first time reaching an advanced layer (2 or 3)
+  const shouldAlert = layerUp && newLayer >= 2 && !parentAlertAt;
   const nowDate = new Date();
 
   await prisma.learningProfile.update({
@@ -70,10 +71,11 @@ export async function calibrateAfterAnswer(
       layer: newLayer,
       encounterRate: newRate,
       lastAnsweredAt: nowDate,
-      ...(layerChanged ? { layerUpAt: nowDate, layerUpSeen: false } : {}),
+      // 昇格時のみ祝福フラグを立てる(降格でホーム演出が誤発火しないように)
+      ...(layerUp ? { layerUpAt: nowDate, layerUpSeen: false } : {}),
       ...(shouldAlert ? { parentAlertAt: nowDate } : {}),
     },
   });
 
-  return { newLayer, layerChanged, accuracy, newRate, shouldAlert };
+  return { newLayer, layerChanged, layerUp, accuracy, newRate, shouldAlert };
 }

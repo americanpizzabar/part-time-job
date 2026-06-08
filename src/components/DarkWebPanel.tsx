@@ -292,18 +292,15 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
   ];
 
-  // ── ORACLE 計算: 総資産(リアルマネー) & 複利による未来予測 ──
-  const bankActiveTotal = (bankData?.deposits ?? [])
-    .filter(d => d.status === "ACTIVE")
-    .reduce((s, d) => s + d.principal, 0);
+  // ── ORACLE 計算: 総資産(リアルマネー=円) & 複利による未来予測 ──
+  // 注: 銀行預金は G-COIN(ゲーム内通貨)なので円の総資産には合算しない
   const cash = balance?.wallet ?? 0;
   const fundValue = fund?.currentValue ?? 0;
   const mercariTotal = mercari?.total ?? 0;
-  const netWorth = cash + fundValue + bankActiveTotal;
+  const netWorth = cash + fundValue;
   const netWorthParts = [
     { label: "現金(財布)", value: cash, color: "#22d3ee" },
     { label: "ファンド評価額", value: fundValue, color: "#818cf8" },
-    { label: "銀行(運用中)", value: bankActiveTotal, color: "#fbbf24" },
   ].filter(p => p.value > 0);
 
   const projAnnualRate = fund?.baseReturnRate ?? 5;
