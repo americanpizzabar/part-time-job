@@ -5,6 +5,7 @@ import { formatJPY, monthRange, DAY_NAMES_JA, today } from "@/lib/dateUtils";
 import { CATEGORY_ICONS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
 import AddTransactionModal from "@/components/AddTransactionModal";
+import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
 
 interface Transaction {
   id: number;
@@ -43,6 +44,10 @@ export default function BudgetPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [breakdown, setBreakdown] = useState<{
+    title: string; note?: string; total: number; totalPositive: boolean;
+    rows: BreakdownRow[]; loading: boolean;
+  } | null>(null);
 
   const { start, end } = monthRange(year, month0);
 
@@ -71,6 +76,95 @@ export default function BudgetPage() {
     const d = new Date(year, month0 + 1, 1);
     setYear(d.getFullYear());
     setMonth0(d.getMonth());
+  }
+
+  async function openBreakdown(type: "wallet" | "free" | "saved" | "income" | "expense") {
+    const titles: Record<string, string> = {
+      wallet: "財布残高の内訳",
+      free: "自由に使える内訳",
+      saved: "貯金中の内訳",
+      income: `${month0 + 1}月の収入`,
+      expense: `${month0 + 1}月の支出`,
+    };
+    const notes: Record<string, string> = {
+      wallet: "全期間の収入 − 支出の合計",
+      free: "財布残高 − 貯金中の合計",
+      saved: "各目標への積立合計",
+      income: `${start} 〜 ${end}`,
+      expense: `${start} 〜 ${end}`,
+    };
+    setBreakdown({ title: titles[type], note: notes[type], total: 0, totalPositive: type !== "expense", rows: [], loading: true });
+
+    if (type === "income") {
+      const rows: BreakdownRow[] = transactions
+        .filter(t => t.type === "INCOME")
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(t => ({ id: t.id, date: t.date, label: t.memo || "収入", sublabel: t.category ?? undefined, amount: t.amount, positive: true }));
+      const total = rows.reduce((s, r) => s + r.amount, 0);
+      setBreakdown(prev => prev ? { ...prev, rows, total, loading: false } : null);
+      return;
+    }
+    if (type === "expense") {
+      const rows: BreakdownRow[] = transactions
+        .filter(t => t.type === "EXPENSE")
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(t => ({ id: t.id, date: t.date, label: t.category || "支出", sublabel: t.memo ?? undefined, amount: t.amount, positive: false }));
+      const total = rows.reduce((s, r) => s + r.amount, 0);
+      setBreakdown(prev => prev ? { ...prev, rows, total, totalPositive: false, loading: false } : null);
+      return;
+    }
+
+    // wallet / free / saved — fetch all-time data
+    const [allTxRes, goalsRes] = await Promise.all([
+      fetch("/api/transactions").then(r => r.json()).catch(() => []),
+      fetch("/api/goals").then(r => r.json()).catch(() => []),
+    ]);
+    const allTx: Transaction[] = Array.isArray(allTxRes) ? allTxRes : [];
+    const goals: { id: number; name: string; saved: number; contributions: { id: number; date: string; amount: number; memo: string | null }[] }[] =
+      Array.isArray(goalsRes) ? goalsRes : [];
+
+    if (type === "wallet") {
+      const rows: BreakdownRow[] = allTx
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(t => ({
+          id: t.id,
+          date: t.date,
+          label: t.type === "INCOME" ? (t.memo || "収入") : (t.category || "支出"),
+          sublabel: t.type === "INCOME" ? t.category ?? undefined : t.memo ?? undefined,
+          amount: t.amount,
+          positive: t.type === "INCOME",
+        }));
+      const income = allTx.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+      const expense = allTx.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+      setBreakdown(prev => prev ? { ...prev, rows, total: income - expense, loading: false } : null);
+    } else if (type === "free") {
+      const savings = goals.flatMap(g =>
+        g.contributions.map(c => ({
+          id: `${g.id}-${c.id}`,
+          date: c.date,
+          label: g.name,
+          sublabel: c.memo ?? undefined,
+          amount: c.amount,
+          positive: false,
+        }))
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      const savedTotal = goals.reduce((s, g) => s + g.saved, 0);
+      setBreakdown(prev => prev ? { ...prev, rows: savings, total: (balance?.free ?? 0), note: `財布 ${formatJPY(balance?.wallet ?? 0)} − 貯金 ${formatJPY(savedTotal)}`, loading: false } : null);
+    } else {
+      // saved
+      const rows: BreakdownRow[] = goals.flatMap(g =>
+        g.contributions.map(c => ({
+          id: `${g.id}-${c.id}`,
+          date: c.date,
+          label: g.name,
+          sublabel: c.memo ?? undefined,
+          amount: c.amount,
+          positive: false,
+        }))
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      const savedTotal = goals.reduce((s, g) => s + g.saved, 0);
+      setBreakdown(prev => prev ? { ...prev, rows, total: savedTotal, totalPositive: false, loading: false } : null);
+    }
   }
 
   async function handleDelete(id: number) {
@@ -123,18 +217,21 @@ export default function BudgetPage() {
       {/* 残高 */}
       {balance && (
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+          <button onClick={() => openBreakdown("wallet")} className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
             <div className="text-xs text-gray-500">財布残高</div>
             <div className="text-base font-bold text-gray-800 mt-0.5">{formatJPY(balance.wallet)}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+            <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+          </button>
+          <button onClick={() => openBreakdown("free")} className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
             <div className="text-xs text-gray-500">自由に使える</div>
             <div className="text-base font-bold text-green-600 mt-0.5">{formatJPY(balance.free)}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+            <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+          </button>
+          <button onClick={() => openBreakdown("saved")} className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
             <div className="text-xs text-gray-500">貯金中</div>
             <div className="text-base font-bold text-indigo-600 mt-0.5">{formatJPY(balance.saved)}</div>
-          </div>
+            <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+          </button>
         </div>
       )}
 
@@ -266,14 +363,16 @@ export default function BudgetPage() {
                 💡 {needsWantsFeedback(balance.month.needsRatio, balance.month.wantsRatio, balance.month.total)}
               </div>
               <div className="grid grid-cols-2 gap-2 mt-3 text-center">
-                <div className="bg-gray-50 rounded-lg p-2">
+                <button onClick={() => openBreakdown("income")} className="bg-gray-50 rounded-lg p-2 active:bg-gray-100 transition-colors">
                   <div className="text-xs text-gray-500">今月の収入</div>
                   <div className="text-sm font-bold text-blue-600">{formatJPY(balance.month.income)}</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-2">
+                  <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+                </button>
+                <button onClick={() => openBreakdown("expense")} className="bg-gray-50 rounded-lg p-2 active:bg-gray-100 transition-colors">
                   <div className="text-xs text-gray-500">今月の支出</div>
                   <div className="text-sm font-bold text-red-500">{formatJPY(balance.month.expense)}</div>
-                </div>
+                  <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+                </button>
               </div>
             </div>
           )}
@@ -285,6 +384,18 @@ export default function BudgetPage() {
           defaultDate={selectedDate ?? undefined}
           onSaved={fetchData}
           onClose={() => setShowAdd(false)}
+        />
+      )}
+
+      {breakdown && (
+        <BreakdownDrawer
+          title={breakdown.title}
+          note={breakdown.note}
+          total={breakdown.total}
+          totalPositive={breakdown.totalPositive}
+          rows={breakdown.rows}
+          loading={breakdown.loading}
+          onClose={() => setBreakdown(null)}
         />
       )}
     </div>

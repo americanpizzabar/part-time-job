@@ -15,6 +15,7 @@ import EvolutionCutin from "@/components/EvolutionCutin";
 import QuizBanner from "@/components/QuizBanner";
 import MoneyFlow from "@/components/MoneyFlow";
 import SyncBarometer from "@/components/SyncBarometer";
+import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
 
 interface OptisData {
   experience: number;
@@ -105,6 +106,10 @@ export default function OptisLabPage() {
   const [mercariSales, setMercariSales] = useState<{ id: number; itemName: string | null; amount: number; date: string }[]>([]);
   const [editingSale, setEditingSale] = useState<{ id: number; amount: string; itemName: string } | null>(null);
   const [traderCelebration, setTraderCelebration] = useState(false);
+  const [breakdown, setBreakdown] = useState<{
+    title: string; note?: string; total: number; totalPositive: boolean;
+    rows: BreakdownRow[]; loading: boolean;
+  } | null>(null);
   const [monthTx, setMonthTx] = useState<MonthTransaction[]>([]);
   const [syncAccuracy, setSyncAccuracy] = useState(0);
   const [syncGenres, setSyncGenres] = useState<{ label: string; accuracy: number }[]>([]);
@@ -328,6 +333,54 @@ export default function OptisLabPage() {
     fetchAll();
   }
 
+  async function openBalanceBreakdown(type: "wallet" | "free") {
+    const isWallet = type === "wallet";
+    setBreakdown({ title: isWallet ? "財布の内訳" : "自由に使える内訳", total: 0, totalPositive: true, rows: [], loading: true });
+    const [allTxRes, goalsRes] = await Promise.all([
+      fetch("/api/transactions").then(r => r.json()).catch(() => []),
+      fetch("/api/goals").then(r => r.json()).catch(() => []),
+    ]);
+    const allTx: { id: number; type: string; amount: number; date: string; category: string | null; memo: string | null }[] =
+      Array.isArray(allTxRes) ? allTxRes : [];
+    const goals: { id: number; name: string; saved: number; contributions: { id: number; date: string; amount: number; memo: string | null }[] }[] =
+      Array.isArray(goalsRes) ? goalsRes : [];
+
+    if (isWallet) {
+      const rows: BreakdownRow[] = allTx
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(t => ({
+          id: t.id,
+          date: t.date,
+          label: t.type === "INCOME" ? (t.memo || "収入") : (t.category || "支出"),
+          sublabel: t.type === "INCOME" ? t.category ?? undefined : t.memo ?? undefined,
+          amount: t.amount,
+          positive: t.type === "INCOME",
+        }));
+      const income = allTx.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
+      const expense = allTx.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+      setBreakdown(prev => prev ? { ...prev, rows, total: income - expense, note: "全期間の収入 − 支出の合計", loading: false } : null);
+    } else {
+      const savedTotal = goals.reduce((s, g) => s + g.saved, 0);
+      const rows: BreakdownRow[] = goals.flatMap(g =>
+        g.contributions.map(c => ({
+          id: `${g.id}-${c.id}`,
+          date: c.date,
+          label: g.name,
+          sublabel: c.memo ?? undefined,
+          amount: c.amount,
+          positive: false,
+        }))
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      setBreakdown(prev => prev ? {
+        ...prev,
+        rows,
+        total: balance?.free ?? 0,
+        note: `財布 ${formatJPY(balance?.wallet ?? 0)} − 貯金 ${formatJPY(savedTotal)}`,
+        loading: false,
+      } : null);
+    }
+  }
+
   async function loadMercari() {
     try {
       const data = await fetch("/api/mercari").then(r => r.json());
@@ -471,14 +524,14 @@ export default function OptisLabPage() {
 
       {/* ステータスバー */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="bg-white rounded-xl border border-gray-200 p-2.5 text-center">
+        <button onClick={() => balance && openBalanceBreakdown("wallet")} className="bg-white rounded-xl border border-gray-200 p-2.5 text-center active:bg-gray-50 transition-colors">
           <div className="text-[10px] text-gray-400">財布</div>
           <div className="text-sm font-bold text-gray-800">{balance ? formatJPY(balance.wallet) : "—"}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-2.5 text-center">
+        </button>
+        <button onClick={() => balance && openBalanceBreakdown("free")} className="bg-white rounded-xl border border-gray-200 p-2.5 text-center active:bg-gray-50 transition-colors">
           <div className="text-[10px] text-gray-400">自由に使える</div>
           <div className="text-sm font-bold text-green-600">{balance ? formatJPY(balance.free) : "—"}</div>
-        </div>
+        </button>
         <div className="bg-white rounded-xl border border-gray-200 p-2.5 text-center">
           <div className="text-[10px] text-gray-400">信用スコア</div>
           <div className="text-sm font-bold text-indigo-600">{optis.creditScore}</div>
@@ -879,6 +932,18 @@ export default function OptisLabPage() {
 
       {showAdd && <QuickAddModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
       {showRoulette && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}
+
+      {breakdown && (
+        <BreakdownDrawer
+          title={breakdown.title}
+          note={breakdown.note}
+          total={breakdown.total}
+          totalPositive={breakdown.totalPositive}
+          rows={breakdown.rows}
+          loading={breakdown.loading}
+          onClose={() => setBreakdown(null)}
+        />
+      )}
 
       {/* ローン申請モーダル */}
       {showLoanForm && (
