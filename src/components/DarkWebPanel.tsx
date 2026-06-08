@@ -95,6 +95,8 @@ interface QuizStatus {
   quiz: { id: number; question: string; weatherType: string } | null;
   hasShield: boolean;
   shieldUntil: string | null;
+  answeredToday: boolean;
+  lastAnswered: { correct: boolean; createdAt: string } | null;
 }
 
 type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
@@ -1037,7 +1039,24 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
               )}
             </div>
 
-            {quizStatus?.quiz ? (() => {
+            {quizStatus?.answeredToday && (
+              <div className="border border-emerald-800/40 rounded-xl p-4 bg-black/40">
+                <div className="text-[10px] text-emerald-600 tracking-widest mb-2">// DAILY_LIMIT</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{quizStatus.lastAnswered?.correct ? "✅" : "❌"}</span>
+                  <div>
+                    <div className="text-emerald-400 text-sm font-bold">本日の出題は終了</div>
+                    <div className="text-emerald-700 text-[10px]">
+                      {quizStatus.lastAnswered?.correct
+                        ? "正解済み — 盾を手に入れた。明日また出題される。"
+                        : "不正解 — 明日また挑戦しよう。"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!quizStatus?.answeredToday && quizStatus?.quiz ? (() => {
               const wMeta = WEATHER_META[quizStatus.quiz!.weatherType as WeatherType] ?? WEATHER_META.NEUTRAL;
               return (
                 <div className="border rounded-xl p-4 bg-black/40" style={{ borderColor: `${wMeta.color}40` }}>

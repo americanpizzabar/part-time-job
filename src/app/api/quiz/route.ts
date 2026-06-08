@@ -145,7 +145,15 @@ export async function GET() {
   const hasShield = !!shieldAttempt;
   const shieldUntil = shieldAttempt?.shieldUntil ?? null;
 
-  if (!quiz) {
+  // 一日一問: 今日すでに回答済みなら出題しない
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const answeredToday = await prisma.quizAttempt.findFirst({
+    where: { createdAt: { gte: startOfToday } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!quiz || answeredToday) {
     return NextResponse.json({
       quiz: null,
       hasShield,
@@ -153,6 +161,8 @@ export async function GET() {
       layer: profile.layer,
       effectiveLayer,
       allowedGenres,
+      answeredToday: !!answeredToday,
+      lastAnswered: answeredToday ? { correct: answeredToday.correct, createdAt: answeredToday.createdAt } : null,
     });
   }
 
@@ -179,6 +189,8 @@ export async function GET() {
     effectiveLayer,
     allowedGenres,
     layerLabel: LAYER_LABELS[profile.layer] ?? "高校受験",
+    answeredToday: false,
+    lastAnswered: null,
   });
 }
 
