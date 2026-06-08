@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
-import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WeatherType, TRADER_MARKET_DISCOUNT, effectiveWeatherMultiplier, creditRank } from "@/lib/optis";
+import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WeatherType, TRADER_MARKET_DISCOUNT, effectiveWeatherMultiplier, creditRank, awakeningTier, effectiveSellFee } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -44,19 +44,37 @@ export async function GET() {
   const discountSource = buyDiscount === 0 ? null
     : (rank.marketDiscount >= (traderUnlocked ? TRADER_MARKET_DISCOUNT : 0) && rank.marketDiscount > 0 ? "credit" : "trader");
 
+  const aTier = awakeningTier(state.awakening);
+  const sellFee = effectiveSellFee(aTier);
+
+  // 最近のトレード履歴とP&L集計
+  const recentTrades = await prisma.marketTrade.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+  const realizedPnl = recentTrades.reduce((acc, t) => {
+    if (t.action === "SELL") return acc + t.price;
+    if (t.action === "BUY") return acc - t.price;
+    return acc;
+  }, 0);
+
   const listings = await Promise.all(
     PARTS.filter(p => p.id !== "body_core" && p.id !== "aura_basic").map(async (part) => {
       const priceRow = await getOrInitPrice(part.id);
       const baseRawPrice = priceRow?.currentPrice ?? MARKET_BASE_PRICES[part.rarity];
       const weatherPrice = Math.round((baseRawPrice * weatherMultiplier) / 5) * 5;
-      // 買値に割引(商人 or 信用ランクの大きい方)を適用。売値は据え置き。
+      // 買値に割引(商人 or 信用ランクの大きい方)を適用。売値は覚醒ティアで手数料減少。
       const currentPrice = Math.round((weatherPrice * (1 - buyDiscount)) / 5) * 5;
+      const sellPrice = marketSellPrice(weatherPrice, sellFee);
       const base = MARKET_BASE_PRICES[part.rarity];
       const priceDelta = currentPrice - base;
+      // 未実現P&L: 最後の買値 vs 今の売値
+      const lastBuy = recentTrades.find(t => t.partId === part.id && t.action === "BUY");
+      const unrealizedPnl = lastBuy ? sellPrice - lastBuy.price : null;
       return {
         ...part,
         currentPrice,
-        sellPrice: marketSellPrice(weatherPrice),
+        sellPrice,
         basePrice: base,
         priceDelta,
         trend: priceDelta > 5 ? "up" : priceDelta < -5 ? "down" : "flat",
@@ -64,6 +82,7 @@ export async function GET() {
         equipped: [state.equippedBody, state.equippedAura, state.equippedAccessory].includes(part.id),
         totalBought: priceRow?.totalBought ?? 0,
         totalSold: priceRow?.totalSold ?? 0,
+        unrealizedPnl,
       };
     })
   );
@@ -79,6 +98,10 @@ export async function GET() {
     rank,
     buyDiscount,
     discountSource,
+    awakeningTier: aTier,
+    sellFee,
+    realizedPnl,
+    recentTrades: recentTrades.slice(0, 10),
   });
 }
 
@@ -114,6 +137,8 @@ export async function POST(req: Request) {
 
   const base = MARKET_BASE_PRICES[part.rarity];
   const todayStr = today();
+  const aTier = awakeningTier(state.awakening);
+  const sellFee = effectiveSellFee(aTier);
 
   if (action === "BUY") {
     if (unlocked.includes(partId)) {
@@ -140,6 +165,9 @@ export async function POST(req: Request) {
         where: { id: priceRow.id },
         data: { totalBought: newTotalBought, currentPrice: newPrice, history },
       }),
+      prisma.marketTrade.create({
+        data: { partId, action: "BUY", price: buyPrice, date: todayStr },
+      }),
     ]);
 
     return NextResponse.json({ ok: true, paid: buyPrice, newPrice });
@@ -154,7 +182,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "装備中のパーツは売却できません" }, { status: 400 });
     }
 
-    const sellPrice = marketSellPrice(weatherPrice);
+    // 覚醒ティアが高いほど手数料が低く、手取りが多い
+    const sellPrice = marketSellPrice(weatherPrice, sellFee);
     const newTotalSold = priceRow.totalSold + 1;
     const newPrice = computeMarketPrice(base, priceRow.totalBought, newTotalSold);
     const history = (priceRow.history as { date: string; price: number }[]).slice(-29);
@@ -172,9 +201,12 @@ export async function POST(req: Request) {
         where: { id: priceRow.id },
         data: { totalSold: newTotalSold, currentPrice: newPrice, history },
       }),
+      prisma.marketTrade.create({
+        data: { partId, action: "SELL", price: sellPrice, date: todayStr },
+      }),
     ]);
 
-    return NextResponse.json({ ok: true, received: sellPrice, newPrice });
+    return NextResponse.json({ ok: true, received: sellPrice, newPrice, sellFee });
   }
 
   return NextResponse.json({ error: "action must be BUY or SELL" }, { status: 400 });

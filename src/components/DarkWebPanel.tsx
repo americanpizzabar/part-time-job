@@ -50,7 +50,11 @@ interface MarketListing {
   color: string; emoji?: string; seasonal?: boolean;
   currentPrice: number; sellPrice: number; basePrice: number; priceDelta: number;
   trend: "up" | "down" | "flat"; owned: boolean; equipped: boolean;
-  totalBought: number; totalSold: number;
+  totalBought: number; totalSold: number; unrealizedPnl: number | null;
+}
+
+interface MarketTrade {
+  id: number; partId: string; action: string; price: number; date: string;
 }
 
 interface MarketData {
@@ -62,6 +66,10 @@ interface MarketData {
   buyDiscount?: number;
   discountSource?: "trader" | "credit" | null;
   rank?: { tier: number; label: string; marketDiscount: number };
+  awakeningTier?: number;
+  sellFee?: number;
+  realizedPnl?: number;
+  recentTrades?: MarketTrade[];
 }
 
 interface FeedItem {
@@ -820,11 +828,33 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
               </div>
 
               {market && (market.buyDiscount ?? 0) > 0 && (
-                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-2 py-1.5 mb-3">
+                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-2 py-1.5 mb-2">
                   ◈ 買値割引 -{Math.round((market.buyDiscount ?? 0) * 100)}%
                   <span className="text-emerald-600 ml-1">
                     ({market.discountSource === "credit" ? `信用ランク ${market.rank?.label ?? ""}` : "商人属性"})
                   </span>
+                </div>
+              )}
+
+              {market && (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-black/30 border border-emerald-900/40 rounded-lg px-2 py-1.5">
+                    <div className="text-[9px] text-emerald-700 tracking-widest">AWAKENING TIER</div>
+                    <div className="text-emerald-300 font-mono text-sm">
+                      {"★".repeat(market.awakeningTier ?? 0)}{"☆".repeat(4 - (market.awakeningTier ?? 0))}
+                    </div>
+                    <div className="text-[9px] text-emerald-600">
+                      売却手数料: {Math.round((market.sellFee ?? 0.15) * 100)}%
+                      {(market.awakeningTier ?? 0) > 0 && <span className="text-green-400 ml-1">↓ 自己投資効果</span>}
+                    </div>
+                  </div>
+                  <div className="bg-black/30 border border-emerald-900/40 rounded-lg px-2 py-1.5">
+                    <div className="text-[9px] text-emerald-700 tracking-widest">REALIZED P&L</div>
+                    <div className={`font-mono text-sm ${(market.realizedPnl ?? 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {(market.realizedPnl ?? 0) >= 0 ? "+" : ""}{market.realizedPnl ?? 0}G
+                    </div>
+                    <div className="text-[9px] text-emerald-600">累計確定損益</div>
+                  </div>
                 </div>
               )}
 
@@ -885,12 +915,37 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                         <div className="text-yellow-700 text-[10px]">
                           売却: <span className="text-yellow-400">{listing.sellPrice}G</span>
                           <span className="ml-1">{listing.trend === "up" ? "↑" : listing.trend === "down" ? "↓" : "―"}</span>
+                          {listing.unrealizedPnl != null && (
+                            <span className={`ml-2 font-bold ${listing.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {listing.unrealizedPnl >= 0 ? "+" : ""}{listing.unrealizedPnl}G
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => loadChart(listing.id)} className="text-[10px] text-emerald-700 border border-emerald-900/40 rounded px-1.5 py-0.5">📈</button>
                       <button onClick={() => sellPart(listing.id)} className="text-[10px] text-yellow-400 border border-yellow-700/40 rounded px-2 py-1 font-bold">売る</button>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {market && (market.recentTrades ?? []).length > 0 && (
+              <div className="border border-emerald-900/30 rounded-xl p-3 bg-black/40">
+                <div className="text-[10px] text-emerald-700 tracking-widest mb-2">// TRADE_LOG — 最近の取引</div>
+                <div className="space-y-1">
+                  {(market.recentTrades ?? []).slice(0, 5).map(trade => {
+                    const p = PARTS.find(x => x.id === trade.partId);
+                    return (
+                      <div key={trade.id} className="flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-emerald-700">{trade.date}</span>
+                        <span className="text-emerald-500 truncate mx-2">{p?.emoji ?? "◎"} {p?.name ?? trade.partId}</span>
+                        <span className={trade.action === "SELL" ? "text-yellow-400" : "text-cyan-400"}>
+                          {trade.action === "SELL" ? "SELL" : "BUY "} {trade.price}G
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

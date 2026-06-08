@@ -472,6 +472,16 @@ model BackupSnapshot {
   createdAt   DateTime @default(now())
 }
 
+// ─── マーケット取引履歴(裏モードの投資成績 P&L 計算用) ──────────────────────
+model MarketTrade {
+  id        Int      @id @default(autoincrement())
+  partId    String
+  action    String   // BUY | SELL
+  price     Int      // 支払/受取した Gコイン
+  date      String   // "YYYY-MM-DD"
+  createdAt DateTime @default(now())
+}
+
 // ─── データ・デコード(裏モードのインテリジェンス暗号解読) ────────────────────
 // 統計/グラフ読解(DATA)と疑似コード穴埋め(ALGO)を1タップで解くハッキング風ミッション
 model DecodeMission {

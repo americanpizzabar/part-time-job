@@ -418,8 +418,14 @@ export function computeMarketPrice(basePrice: number, totalBought: number, total
   return Math.round((basePrice * multiplier) / 5) * 5; // 5G単位で丸め
 }
 
-export function marketSellPrice(currentPrice: number): number {
-  return Math.floor(currentPrice * (1 - MARKET_SELL_FEE) / 5) * 5;
+export function marketSellPrice(currentPrice: number, fee: number = MARKET_SELL_FEE): number {
+  return Math.floor(currentPrice * (1 - fee) / 5) * 5;
+}
+
+// 覚醒(自己投資の蓄積)ティアが高いほど売却手数料が下がる。
+// tier 0..4 → 手数料 15% → 7%(最低5%でクランプ)。「自己投資が取引上手にする」を表現。
+export function effectiveSellFee(awakeningTier: number): number {
+  return Math.max(0.05, MARKET_SELL_FEE - Math.max(0, awakeningTier) * 0.02);
 }
 
 // ─── 世代引き継ぎボーナス(転生システム) ─────────────────────────────
