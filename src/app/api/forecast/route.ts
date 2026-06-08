@@ -8,6 +8,7 @@ import {
   effectiveWeatherMultiplier,
   creditRank,
   FORECAST_WISDOM_COST,
+  getEquippedEffects,
 } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,8 @@ async function findMarker(activeWeatherId: number) {
 export async function GET() {
   const state = await getOptisState();
   const rank = creditRank(state.creditScore);
-  const cost = Math.round(FORECAST_WISDOM_COST * (1 - rank.forecastDiscount));
+  const equipEffects = getEquippedEffects(state.equippedBody, state.equippedAura, state.equippedAccessory);
+  const cost = Math.max(1, Math.round(FORECAST_WISDOM_COST * (1 - rank.forecastDiscount - (equipEffects.forecastDiscount ?? 0))));
 
   const active = await prisma.economicWeather.findFirst({
     where: { isActive: true },
@@ -58,7 +60,8 @@ export async function GET() {
 export async function POST() {
   const state = await getOptisState();
   const rank = creditRank(state.creditScore);
-  const cost = Math.round(FORECAST_WISDOM_COST * (1 - rank.forecastDiscount));
+  const equipEffects = getEquippedEffects(state.equippedBody, state.equippedAura, state.equippedAccessory);
+  const cost = Math.max(1, Math.round(FORECAST_WISDOM_COST * (1 - rank.forecastDiscount - (equipEffects.forecastDiscount ?? 0))));
 
   const active = await prisma.economicWeather.findFirst({
     where: { isActive: true },

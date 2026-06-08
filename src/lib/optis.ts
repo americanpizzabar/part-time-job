@@ -242,6 +242,15 @@ export function rollRarity(boosted: boolean): Rarity {
 }
 
 // --- パーツカタログ ----------------------------------------
+// 装備効果: RARE以上のパーツが持つパッシブボーナス
+export interface PartEffect {
+  expBonus?: number;          // 全取引のEXP +X%
+  needsExpBonus?: number;     // Needs取引のEXP +X%
+  sellFeeReduction?: number;  // 売却手数料を-X(例: 0.03 = -3%)
+  forecastDiscount?: number;  // 経済予報コストを-X%(例: 0.15 = 15%引き)
+  wisdomBonus?: number;       // キーワードタップ毎に追加知性ポイント
+}
+
 export interface Part {
   id: string;
   type: "body" | "aura" | "accessory";
@@ -252,6 +261,7 @@ export interface Part {
   seasonal?: boolean; // 季節/期間限定
   trader?: boolean; // 商人属性(メルカリ売上)で解放される限定パーツ
   bug?: boolean; // バグパーツ(裏モードのデータ解読でのみ解放)
+  effect?: PartEffect;
 }
 
 export const PARTS: Part[] = [
@@ -265,23 +275,33 @@ export const PARTS: Part[] = [
   { id: "acc_cap", type: "accessory", name: "ストリートキャップ", rarity: "UNCOMMON", color: "#ef4444", emoji: "🧢" },
   { id: "acc_sunglasses", type: "accessory", name: "サマーサングラス", rarity: "UNCOMMON", color: "#fbbf24", emoji: "😎", seasonal: true },
   // ── RARE ───────────────────────────────────────────────────────────────────
-  { id: "aura_gold", type: "aura", name: "ゴールド・オーラ", rarity: "RARE", color: "#f59e0b" },
+  { id: "aura_gold", type: "aura", name: "ゴールド・オーラ", rarity: "RARE", color: "#f59e0b",
+    effect: { needsExpBonus: 0.05 } },                          // Needs EXP +5%
   { id: "aura_sakura", type: "aura", name: "桜吹雪オーラ", rarity: "RARE", color: "#f9a8d4", emoji: "🌸", seasonal: true },
   { id: "aura_autumn", type: "aura", name: "オータム・グロウ・オーラ", rarity: "RARE", color: "#ea580c", emoji: "🍂", seasonal: true },
   { id: "aura_snow", type: "aura", name: "スノウフレーク・オーラ", rarity: "RARE", color: "#bae6fd", emoji: "❄️", seasonal: true },
-  { id: "acc_glasses", type: "accessory", name: "サイバーゴーグル", rarity: "RARE", color: "#0ea5e9", emoji: "🕶️" },
-  { id: "acc_crown", type: "accessory", name: "クリスタル・クラウン", rarity: "RARE", color: "#22d3ee", emoji: "👑" },
+  { id: "acc_glasses", type: "accessory", name: "サイバーゴーグル", rarity: "RARE", color: "#0ea5e9", emoji: "🕶️",
+    effect: { sellFeeReduction: 0.03 } },                       // 売却手数料 -3%
+  { id: "acc_crown", type: "accessory", name: "クリスタル・クラウン", rarity: "RARE", color: "#22d3ee", emoji: "👑",
+    effect: { wisdomBonus: 1 } },                               // 知性タップ +1pt
   { id: "acc_santa", type: "accessory", name: "サンタハット", rarity: "RARE", color: "#dc2626", emoji: "🎅", seasonal: true },
   // ── LEGENDARY ──────────────────────────────────────────────────────────────
-  { id: "aura_rainbow", type: "aura", name: "プリズム・オーラ", rarity: "LEGENDARY", color: "#a855f7", emoji: "🌈" },
-  { id: "acc_halo", type: "accessory", name: "レジェンド・ヘイロー", rarity: "LEGENDARY", color: "#fde047", emoji: "💫" },
+  { id: "aura_rainbow", type: "aura", name: "プリズム・オーラ", rarity: "LEGENDARY", color: "#a855f7", emoji: "🌈",
+    effect: { expBonus: 0.10 } },                               // 全EXP +10%
+  { id: "acc_halo", type: "accessory", name: "レジェンド・ヘイロー", rarity: "LEGENDARY", color: "#fde047", emoji: "💫",
+    effect: { forecastDiscount: 0.15, wisdomBonus: 2 } },       // 予報コスト -15%, 知性タップ +2pt
   // ── TRADER(商人属性: メルカリ売上で解放される限定サイバーパーツ) ──────────────
-  { id: "acc_gold_visor", type: "accessory", name: "ゴールド・バイザー", rarity: "LEGENDARY", color: "#fbbf24", emoji: "🥽", trader: true },
-  { id: "acc_digital_watch", type: "accessory", name: "デジタル・ウォッチ", rarity: "RARE", color: "#fcd34d", emoji: "⌚", trader: true },
+  { id: "acc_gold_visor", type: "accessory", name: "ゴールド・バイザー", rarity: "LEGENDARY", color: "#fbbf24", emoji: "🥽", trader: true,
+    effect: { sellFeeReduction: 0.05 } },                       // 売却手数料 -5%
+  { id: "acc_digital_watch", type: "accessory", name: "デジタル・ウォッチ", rarity: "RARE", color: "#fcd34d", emoji: "⌚", trader: true,
+    effect: { sellFeeReduction: 0.03 } },                       // 売却手数料 -3%
   // ── BUG(バグパーツ: 裏モードのデータ解読でのみ解放されるデジタルノイズ系) ──────
-  { id: "aura_glitch", type: "aura", name: "グリッチ・ノイズ・オーラ", rarity: "LEGENDARY", color: "#22c55e", emoji: "🟩", bug: true },
-  { id: "acc_bug_wings", type: "accessory", name: "バグ・ウイング", rarity: "LEGENDARY", color: "#34d399", emoji: "🦾", bug: true },
-  { id: "acc_terminal", type: "accessory", name: "ターミナル・ゴーグル", rarity: "RARE", color: "#10b981", emoji: "👓", bug: true },
+  { id: "aura_glitch", type: "aura", name: "グリッチ・ノイズ・オーラ", rarity: "LEGENDARY", color: "#22c55e", emoji: "🟩", bug: true,
+    effect: { expBonus: 0.08, wisdomBonus: 1 } },               // 全EXP +8%, 知性タップ +1pt
+  { id: "acc_bug_wings", type: "accessory", name: "バグ・ウイング", rarity: "LEGENDARY", color: "#34d399", emoji: "🦾", bug: true,
+    effect: { expBonus: 0.05 } },                               // 全EXP +5%
+  { id: "acc_terminal", type: "accessory", name: "ターミナル・ゴーグル", rarity: "RARE", color: "#10b981", emoji: "👓", bug: true,
+    effect: { forecastDiscount: 0.20 } },                       // 予報コスト -20%
 ];
 
 // 商人(トレーダー)パーツのID一覧 — メルカリ売上で解放
@@ -289,6 +309,25 @@ export const TRADER_PART_IDS = PARTS.filter(p => p.trader).map(p => p.id);
 
 // バグパーツのID一覧 — 裏モードのデータ解読で解放
 export const BUG_PART_IDS = PARTS.filter(p => p.bug).map(p => p.id);
+
+// 装備中の3パーツの効果を合算して返す(クライアント/サーバー共通)
+export function getEquippedEffects(
+  equippedBody: string | null | undefined,
+  equippedAura: string | null | undefined,
+  equippedAccessory: string | null | undefined
+): PartEffect {
+  const combined: PartEffect = {};
+  for (const id of [equippedBody, equippedAura, equippedAccessory]) {
+    const e = getPart(id)?.effect;
+    if (!e) continue;
+    if (e.expBonus)          combined.expBonus          = (combined.expBonus          ?? 0) + e.expBonus;
+    if (e.needsExpBonus)     combined.needsExpBonus     = (combined.needsExpBonus     ?? 0) + e.needsExpBonus;
+    if (e.sellFeeReduction)  combined.sellFeeReduction  = (combined.sellFeeReduction  ?? 0) + e.sellFeeReduction;
+    if (e.forecastDiscount)  combined.forecastDiscount  = (combined.forecastDiscount  ?? 0) + e.forecastDiscount;
+    if (e.wisdomBonus)       combined.wisdomBonus       = (combined.wisdomBonus       ?? 0) + e.wisdomBonus;
+  }
+  return combined;
+}
 
 // ダークウェブでの商人割引率(トレーダー属性解放時)
 export const TRADER_MARKET_DISCOUNT = 0.15;

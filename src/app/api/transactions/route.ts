@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
-import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER } from "@/lib/optis";
+import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER, getEquippedEffects } from "@/lib/optis";
 import { generateCareerFeedback } from "@/lib/careerFeedback";
 import { getOrCreateLearningProfile } from "@/lib/learningEngine";
 
@@ -63,7 +63,11 @@ export async function POST(req: Request) {
     const frozen = state.freezeUntil && state.freezeUntil > new Date();
     if (!frozen) {
       const isNeeds = needsWants === "NEEDS";
-      let baseExp = EXP_PER_RECORD + (isNeeds ? EXP_NEEDS_BONUS : 0);
+      const equipEffects = getEquippedEffects(state.equippedBody, state.equippedAura, state.equippedAccessory);
+      let baseExp = Math.round(
+        (EXP_PER_RECORD + (isNeeds ? EXP_NEEDS_BONUS : 0))
+        * (1 + (equipEffects.expBonus ?? 0) + (isNeeds ? (equipEffects.needsExpBonus ?? 0) : 0))
+      );
 
       // シャドウ・フィードのブースト効果を確認(Needs記録のみ対象)
       if (isNeeds && category) {

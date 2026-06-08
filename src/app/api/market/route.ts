@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
-import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WeatherType, TRADER_MARKET_DISCOUNT, effectiveWeatherMultiplier, creditRank, awakeningTier, effectiveSellFee } from "@/lib/optis";
+import { PARTS, MARKET_BASE_PRICES, computeMarketPrice, marketSellPrice, WeatherType, TRADER_MARKET_DISCOUNT, effectiveWeatherMultiplier, creditRank, awakeningTier, effectiveSellFee, getEquippedEffects } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -45,14 +45,15 @@ export async function GET() {
     : (rank.marketDiscount >= (traderUnlocked ? TRADER_MARKET_DISCOUNT : 0) && rank.marketDiscount > 0 ? "credit" : "trader");
 
   const aTier = awakeningTier(state.awakening);
-  const sellFee = effectiveSellFee(aTier);
+  const equipEffects = getEquippedEffects(state.equippedBody, state.equippedAura, state.equippedAccessory);
+  const sellFee = Math.max(0.05, effectiveSellFee(aTier) - (equipEffects.sellFeeReduction ?? 0));
 
   // 最近のトレード履歴とP&L集計
   const recentTrades = await prisma.marketTrade.findMany({
     orderBy: { createdAt: "desc" },
     take: 30,
   });
-  const realizedPnl = recentTrades.reduce((acc, t) => {
+  const realizedPnl = recentTrades.reduce((acc: number, t) => {
     if (t.action === "SELL") return acc + t.price;
     if (t.action === "BUY") return acc - t.price;
     return acc;
@@ -138,7 +139,8 @@ export async function POST(req: Request) {
   const base = MARKET_BASE_PRICES[part.rarity];
   const todayStr = today();
   const aTier = awakeningTier(state.awakening);
-  const sellFee = effectiveSellFee(aTier);
+  const postEquipEffects = getEquippedEffects(state.equippedBody, state.equippedAura, state.equippedAccessory);
+  const sellFee = Math.max(0.05, effectiveSellFee(aTier) - (postEquipEffects.sellFeeReduction ?? 0));
 
   if (action === "BUY") {
     if (unlocked.includes(partId)) {

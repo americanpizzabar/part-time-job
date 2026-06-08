@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { formatJPY } from "@/lib/dateUtils";
-import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType, creditRank } from "@/lib/optis";
+import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType, creditRank, PartEffect } from "@/lib/optis";
+import type { MissionType } from "@/lib/dailyMissions";
 import GuildPanel from "@/components/GuildPanel";
 import CodeRain from "@/components/CodeRain";
 
@@ -181,6 +182,9 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [decodeResult, setDecodeResult] = useState<{ id: number; correct: boolean; explanation: string; expGained?: number; gcoinGained?: number; unlockedPart?: { name: string; emoji?: string } | null } | null>(null);
   // DARK CHARGE (匿名スポンサー = 親ブースト)
   const [learning, setLearning] = useState<LearningInfo | null>(null);
+  // GUILD DAILY MISSIONS
+  const [guildMissions, setGuildMissions] = useState<{ type: MissionType; title: string; desc: string; reward: { exp: number; gcoins: number }; brainTag: BrainType; completed: boolean; claimed: boolean }[]>([]);
+  const [guildMsg, setGuildMsg] = useState("");
   // SECRET DROP (23:00 ゲリラ)
   const [drop, setDrop] = useState<DropStatus | null>(null);
   const [dropOverlay, setDropOverlay] = useState(false);
@@ -205,6 +209,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/learning").then(r => r.json()).then(setLearning).catch(() => {});
     fetch("/api/drop").then(r => r.json()).then(setDrop).catch(() => {});
     fetch("/api/forecast").then(r => r.json()).then(setForecast).catch(() => {});
+    fetch("/api/guild/daily").then(r => r.json()).then(d => setGuildMissions(d?.missions ?? [])).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -259,6 +264,23 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
       setForecastMsg(data.error ?? "予報の購入に失敗しました");
       setTimeout(() => setForecastMsg(""), 3000);
     }
+  }
+
+  async function claimMission(type: MissionType) {
+    const r = await fetch("/api/guild/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      setGuildMsg(`+${data.reward.exp} EXP / +${data.reward.gcoins}G 獲得！`);
+      fetch("/api/guild/daily").then(r => r.json()).then(d => setGuildMissions(d?.missions ?? []));
+      onChanged();
+    } else {
+      setGuildMsg(data.error ?? "エラー");
+    }
+    setTimeout(() => setGuildMsg(""), 3000);
   }
 
   async function answerDecode(mission: DecodeMission, index: number) {
@@ -418,6 +440,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
 
   const decodePending = decode.filter(m => !m.solvedAt).length;
   const darkChargePending = !!(learning?.parentAlertAt && !learning.parentBoosted);
+  const guildClaimable = guildMissions.filter(m => m.completed && !m.claimed).length;
 
   // ── ORACLE 計算: 総資産(リアルマネー=円) & 複利による未来予測 ──
   // 注: 銀行預金は G-COIN(ゲーム内通貨)なので円の総資産には合算しない
@@ -476,7 +499,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
         {/* 10タブ (2行×5列) */}
         <div className="grid grid-cols-5 gap-1 mb-5">
           {TABS.map(([t, l]) => {
-            const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending);
+            const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending) || (t === "guild" && guildClaimable > 0);
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`relative py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
@@ -1312,32 +1335,142 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
         )}
 
         {/* ── GUILD ─────────────────────────────────────────────── */}
-        {tab === "guild" && <GuildPanel unlocked={state?.unlocked ?? []} />}
+        {tab === "guild" && (
+          <div className="space-y-3">
+            {/* デイリーミッション */}
+            <div className="border border-emerald-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-emerald-400 tracking-widest mb-1">// DAILY_MISSION — 今日のミッション</div>
+              <div className="text-[10px] text-emerald-700 mb-3">毎日リセット。3つ達成して報酬を受け取れ。</div>
+
+              {guildMsg && (
+                <div className="text-xs text-emerald-300 bg-emerald-900/30 border border-emerald-700/30 rounded-lg p-2 mb-3 font-mono">
+                  {guildMsg}
+                </div>
+              )}
+
+              {guildMissions.length === 0 ? (
+                <div className="text-emerald-700 text-xs font-mono text-center py-4">ミッション読み込み中…</div>
+              ) : (
+                <div className="space-y-2">
+                  {guildMissions.map((m) => {
+                    const brainMatch = brain?.brainType === m.brainTag;
+                    return (
+                      <div key={m.type}
+                        className={`rounded-xl p-3 border transition-all
+                          ${m.claimed ? "border-emerald-900/20 bg-black/20 opacity-50"
+                            : m.completed ? "border-emerald-400/60 bg-emerald-950/40"
+                            : "border-emerald-900/40 bg-black/30"}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {m.claimed && <span className="text-emerald-500 text-xs">✓</span>}
+                              {!m.claimed && m.completed && <span className="text-yellow-400 text-xs">●</span>}
+                              {!m.claimed && !m.completed && <span className="text-emerald-800 text-xs">○</span>}
+                              <span className={`text-xs font-bold ${m.claimed ? "text-emerald-700" : m.completed ? "text-emerald-300" : "text-emerald-500"}`}>
+                                {m.title}
+                              </span>
+                              {brainMatch && !m.claimed && (
+                                <span className="text-[9px] bg-cyan-900/40 text-cyan-400 border border-cyan-800/40 rounded px-1">
+                                  {BRAIN_META[m.brainTag].emoji} 推奨
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-emerald-700 leading-snug pl-4">{m.desc}</div>
+                            <div className="text-[9px] text-emerald-800 pl-4 mt-0.5">
+                              報酬: +{m.reward.exp} EXP / +{m.reward.gcoins}G
+                            </div>
+                          </div>
+                          {m.completed && !m.claimed && (
+                            <button
+                              onClick={() => claimMission(m.type)}
+                              className="shrink-0 text-[10px] font-bold text-black bg-emerald-400 hover:bg-emerald-300 rounded-lg px-2 py-1"
+                            >
+                              受取
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ギルド同盟(既存) */}
+            <GuildPanel unlocked={state?.unlocked ?? []} />
+          </div>
+        )}
 
         {/* ── CLOSET ────────────────────────────────────────────── */}
         {tab === "closet" && (
-          <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
-            <div className="text-[11px] text-cyan-500 tracking-widest mb-3">// CUSTOMIZE — 所持パーツを装備</div>
-            <div className="grid grid-cols-3 gap-2">
-              {PARTS.map(part => {
-                const owned = state?.unlocked.includes(part.id);
-                const equipped = state?.equippedAura === part.id || state?.equippedAccessory === part.id || state?.equippedBody === part.id;
-                const mktEntry = market?.listings.find(l => l.id === part.id);
-                return (
-                  <button key={part.id} disabled={!owned} onClick={() => owned && equip(part)}
-                    className={`rounded-lg p-2 text-center border text-xs transition-all
-                      ${equipped ? "border-cyan-300 bg-cyan-500/20" : owned ? "border-cyan-800 bg-black/40" : "border-gray-800 opacity-30"}`}>
-                    <div className="text-xl mb-0.5">{part.emoji ?? (part.type === "aura" ? "◎" : "▣")}</div>
-                    <div className="text-cyan-200 leading-tight text-[10px]">{part.name}</div>
-                    <div className="text-[9px] mt-0.5" style={{ color: RARITY_META[part.rarity].color }}>
-                      {owned ? RARITY_META[part.rarity].label : "未所持"}
-                    </div>
-                    {owned && mktEntry && !equipped && (
-                      <div className="text-[9px] text-yellow-600 mt-0.5">{marketSellPrice(mktEntry.currentPrice)}G</div>
-                    )}
-                  </button>
-                );
-              })}
+          <div className="space-y-3">
+            {/* 装備中の効果サマリー */}
+            {state && (() => {
+              const slots = [
+                { id: state.equippedBody, label: "BODY" },
+                { id: state.equippedAura, label: "AURA" },
+                { id: state.equippedAccessory, label: "ACC" },
+              ];
+              const activeEffects: { key: string; val: string }[] = [];
+              for (const s of slots) {
+                const p = PARTS.find(x => x.id === s.id);
+                if (!p?.effect) continue;
+                const e = p.effect as PartEffect;
+                if (e.expBonus)         activeEffects.push({ key: `${p.emoji ?? "◎"} 全EXP`, val: `+${Math.round(e.expBonus * 100)}%` });
+                if (e.needsExpBonus)    activeEffects.push({ key: `${p.emoji ?? "◎"} NeedsEXP`, val: `+${Math.round(e.needsExpBonus * 100)}%` });
+                if (e.sellFeeReduction) activeEffects.push({ key: `${p.emoji ?? "◎"} 売却手数料`, val: `-${Math.round(e.sellFeeReduction * 100)}%` });
+                if (e.forecastDiscount) activeEffects.push({ key: `${p.emoji ?? "◎"} 予報コスト`, val: `-${Math.round(e.forecastDiscount * 100)}%` });
+                if (e.wisdomBonus)      activeEffects.push({ key: `${p.emoji ?? "◎"} 知性タップ`, val: `+${e.wisdomBonus}pt` });
+              }
+              return activeEffects.length > 0 ? (
+                <div className="border border-cyan-700/30 rounded-xl p-3 bg-black/40">
+                  <div className="text-[9px] text-cyan-600 tracking-widest mb-2">// ACTIVE_EFFECTS — 装備中の効果</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {activeEffects.map((ae, i) => (
+                      <div key={i} className="flex justify-between text-[10px] font-mono bg-cyan-950/30 rounded px-1.5 py-0.5">
+                        <span className="text-cyan-600">{ae.key}</span>
+                        <span className="text-cyan-300">{ae.val}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-cyan-500 tracking-widest mb-3">// CUSTOMIZE — 所持パーツを装備</div>
+              <div className="grid grid-cols-3 gap-2">
+                {PARTS.map(part => {
+                  const owned = state?.unlocked.includes(part.id);
+                  const equipped = state?.equippedAura === part.id || state?.equippedAccessory === part.id || state?.equippedBody === part.id;
+                  const mktEntry = market?.listings.find(l => l.id === part.id);
+                  const e = part.effect as PartEffect | undefined;
+                  const effectTags = e ? [
+                    e.expBonus         ? `EXP+${Math.round(e.expBonus * 100)}%` : null,
+                    e.needsExpBonus    ? `N+${Math.round(e.needsExpBonus * 100)}%` : null,
+                    e.sellFeeReduction ? `手数料-${Math.round(e.sellFeeReduction * 100)}%` : null,
+                    e.forecastDiscount ? `予報-${Math.round(e.forecastDiscount * 100)}%` : null,
+                    e.wisdomBonus      ? `知性+${e.wisdomBonus}` : null,
+                  ].filter(Boolean) : [];
+                  return (
+                    <button key={part.id} disabled={!owned} onClick={() => owned && equip(part)}
+                      className={`rounded-lg p-2 text-center border text-xs transition-all
+                        ${equipped ? "border-cyan-300 bg-cyan-500/20" : owned ? "border-cyan-800 bg-black/40" : "border-gray-800 opacity-30"}`}>
+                      <div className="text-xl mb-0.5">{part.emoji ?? (part.type === "aura" ? "◎" : "▣")}</div>
+                      <div className="text-cyan-200 leading-tight text-[10px]">{part.name}</div>
+                      <div className="text-[9px] mt-0.5" style={{ color: RARITY_META[part.rarity].color }}>
+                        {owned ? RARITY_META[part.rarity].label : "未所持"}
+                      </div>
+                      {effectTags.length > 0 && (
+                        <div className="text-[8px] text-yellow-500 mt-0.5 leading-tight">{effectTags[0]}</div>
+                      )}
+                      {owned && mktEntry && !equipped && (
+                        <div className="text-[9px] text-yellow-600 mt-0.5">{marketSellPrice(mktEntry.currentPrice)}G</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
