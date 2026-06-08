@@ -251,6 +251,7 @@ export interface Part {
   emoji?: string;
   seasonal?: boolean; // 季節/期間限定
   trader?: boolean; // 商人属性(メルカリ売上)で解放される限定パーツ
+  bug?: boolean; // バグパーツ(裏モードのデータ解読でのみ解放)
 }
 
 export const PARTS: Part[] = [
@@ -277,10 +278,17 @@ export const PARTS: Part[] = [
   // ── TRADER(商人属性: メルカリ売上で解放される限定サイバーパーツ) ──────────────
   { id: "acc_gold_visor", type: "accessory", name: "ゴールド・バイザー", rarity: "LEGENDARY", color: "#fbbf24", emoji: "🥽", trader: true },
   { id: "acc_digital_watch", type: "accessory", name: "デジタル・ウォッチ", rarity: "RARE", color: "#fcd34d", emoji: "⌚", trader: true },
+  // ── BUG(バグパーツ: 裏モードのデータ解読でのみ解放されるデジタルノイズ系) ──────
+  { id: "aura_glitch", type: "aura", name: "グリッチ・ノイズ・オーラ", rarity: "LEGENDARY", color: "#22c55e", emoji: "🟩", bug: true },
+  { id: "acc_bug_wings", type: "accessory", name: "バグ・ウイング", rarity: "LEGENDARY", color: "#34d399", emoji: "🦾", bug: true },
+  { id: "acc_terminal", type: "accessory", name: "ターミナル・ゴーグル", rarity: "RARE", color: "#10b981", emoji: "👓", bug: true },
 ];
 
 // 商人(トレーダー)パーツのID一覧 — メルカリ売上で解放
 export const TRADER_PART_IDS = PARTS.filter(p => p.trader).map(p => p.id);
+
+// バグパーツのID一覧 — 裏モードのデータ解読で解放
+export const BUG_PART_IDS = PARTS.filter(p => p.bug).map(p => p.id);
 
 // ダークウェブでの商人割引率(トレーダー属性解放時)
 export const TRADER_MARKET_DISCOUNT = 0.15;

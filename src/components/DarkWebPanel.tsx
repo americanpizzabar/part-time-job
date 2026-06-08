@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { formatJPY } from "@/lib/dateUtils";
 import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType } from "@/lib/optis";
 import GuildPanel from "@/components/GuildPanel";
+import CodeRain from "@/components/CodeRain";
 
 interface DarkWebPanelProps {
   optis: { level: number; intoLevel: number; needed: number; experience: number; creditScore: number; gcoins?: number; generation?: number; langMode?: string; hasQuizShield?: boolean };
@@ -77,7 +78,21 @@ interface QuizStatus {
   shieldUntil: string | null;
 }
 
-type Tab = "matrix" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
+type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
+
+interface DecodeMission {
+  id: number; kind: "DATA" | "ALGO"; title: string; brief: string;
+  dataset: string | null; question: string; choices: string[];
+  explanation: string | null; expReward: number; gcoinReward: number;
+  rewardPartId: string | null; solvedAt: string | null;
+}
+
+interface LearningInfo {
+  layer: number; layerLabel: string;
+  parentAlertAt: string | null; parentBoosted: boolean;
+}
+
+interface DropStatus { windowOpen: boolean; claimedToday: boolean; dropHour: number; }
 
 function calcPriceHack(nowPrice: number, waitMonths: number, dropPct: number) {
   const future = Math.round(nowPrice * (1 - dropPct / 100));
@@ -140,6 +155,17 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [mercari, setMercari] = useState<{ total: number } | null>(null);
   const [projMonthly, setProjMonthly] = useState("2000");
   const [projYears, setProjYears] = useState("10");
+  // DECODE (データ解読)
+  const [decode, setDecode] = useState<DecodeMission[]>([]);
+  const [decodeResult, setDecodeResult] = useState<{ id: number; correct: boolean; explanation: string; expGained?: number; gcoinGained?: number; unlockedPart?: { name: string; emoji?: string } | null } | null>(null);
+  // DARK CHARGE (匿名スポンサー = 親ブースト)
+  const [learning, setLearning] = useState<LearningInfo | null>(null);
+  // SECRET DROP (23:00 ゲリラ)
+  const [drop, setDrop] = useState<DropStatus | null>(null);
+  const [dropOverlay, setDropOverlay] = useState(false);
+  const [dropCountdown, setDropCountdown] = useState(60);
+  const [dropReward, setDropReward] = useState<{ expGained: number; gcoinGained: number; label: string; unlockedPart?: { name: string; emoji?: string } | null } | null>(null);
+  const dropSeenRef = useRef(false);
 
   const load = () => {
     fetch("/api/optis").then(r => r.json()).then(setState);
@@ -154,8 +180,68 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/wordmission").then(r => r.json()).then(setMissions).catch(() => {});
     fetch("/api/balance").then(r => r.json()).then(setBalance).catch(() => {});
     fetch("/api/mercari").then(r => r.json()).then(setMercari).catch(() => {});
+    fetch("/api/decode").then(r => r.json()).then(d => setDecode(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch("/api/learning").then(r => r.json()).then(setLearning).catch(() => {});
+    fetch("/api/drop").then(r => r.json()).then(setDrop).catch(() => {});
   };
   useEffect(() => { load(); }, []);
+
+  // シークレット・ドロップ: 23:00台かつ未回収なら一度だけゲリラ・ウィンドウを開く
+  useEffect(() => {
+    if (drop?.windowOpen && !drop.claimedToday && !dropSeenRef.current) {
+      dropSeenRef.current = true;
+      setDropOverlay(true);
+      setDropCountdown(60);
+    }
+  }, [drop]);
+
+  // 60秒カウントダウン(0で自動的に閉じる)
+  useEffect(() => {
+    if (!dropOverlay || dropReward) return;
+    const iv = setInterval(() => {
+      setDropCountdown(c => {
+        if (c <= 1) {
+          clearInterval(iv);
+          setDropOverlay(false);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [dropOverlay, dropReward]);
+
+  async function claimDrop() {
+    const r = await fetch("/api/drop", { method: "POST" });
+    const data = await r.json();
+    if (r.ok) {
+      setDropReward({ expGained: data.expGained, gcoinGained: data.gcoinGained, label: data.label, unlockedPart: data.unlockedPart });
+      load(); onChanged();
+      // 回収したら即終了・自動ログアウト
+      setTimeout(() => { setDropOverlay(false); setDropReward(null); onExit(); }, 2800);
+    } else {
+      setDropOverlay(false);
+    }
+  }
+
+  async function answerDecode(mission: DecodeMission, index: number) {
+    const r = await fetch(`/api/decode/${mission.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedIndex: index }),
+    });
+    const data = await r.json();
+    setDecodeResult({
+      id: mission.id, correct: data.correct, explanation: data.explanation,
+      expGained: data.expGained, gcoinGained: data.gcoinGained, unlockedPart: data.unlockedPart,
+    });
+    if (data.correct) {
+      load(); onChanged();
+      setTimeout(() => setDecodeResult(null), 3200);
+    } else {
+      setTimeout(() => setDecodeResult(null), 2600);
+    }
+  }
 
   async function equip(part: Part) {
     await fetch("/api/optis", {
@@ -288,9 +374,13 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   }
 
   const TABS: [Tab, string][] = [
-    ["matrix", "MATRIX"], ["oracle", "ORACLE"], ["market", "MARKET"], ["quiz", "QUIZ"], ["brain", "BRAIN"],
-    ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"], ["closet", "CLOSET"], ["status", "STATUS"],
+    ["matrix", "MATRIX"], ["decode", "DECODE"], ["oracle", "ORACLE"], ["market", "MARKET"], ["quiz", "QUIZ"],
+    ["brain", "BRAIN"], ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"],
+    ["closet", "CLOSET"], ["status", "STATUS"],
   ];
+
+  const decodePending = decode.filter(m => !m.solvedAt).length;
+  const darkChargePending = !!(learning?.parentAlertAt && !learning.parentBoosted);
 
   // ── ORACLE 計算: 総資産(リアルマネー=円) & 複利による未来予測 ──
   // 注: 銀行預金は G-COIN(ゲーム内通貨)なので円の総資産には合算しない
@@ -330,7 +420,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
 
   return (
     <div className="fixed inset-0 z-[70] dark-web dark-web-grid overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-4 py-6 pb-28">
+      <CodeRain color="#22c55e" opacity={0.16} />
+      <div className="relative z-10 max-w-2xl mx-auto px-4 py-6 pb-28">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-bold neon-flicker tracking-widest" style={{ textShadow: "0 0 8px #22d3ee" }}>
@@ -347,12 +438,16 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
 
         {/* 10タブ (2行×5列) */}
         <div className="grid grid-cols-5 gap-1 mb-5">
-          {TABS.map(([t, l]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
-              {l}
-            </button>
-          ))}
+          {TABS.map(([t, l]) => {
+            const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending);
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                className={`relative py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
+                {l}
+                {dot && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
+              </button>
+            );
+          })}
         </div>
 
         {/* ── MATRIX ───────────────────────────────────────────── */}
@@ -442,6 +537,94 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                 );
               })()}
             </div>
+          </div>
+        )}
+
+        {/* ── DECODE ───────────────────────────────────────────── */}
+        {tab === "decode" && (
+          <div className="space-y-3">
+            <div className="border border-emerald-500/40 rounded-xl p-4 bg-black/50">
+              <div className="text-[11px] text-emerald-400 tracking-widest mb-1">// DATA_DECODE — インテリジェンス暗号解読</div>
+              <div className="text-[10px] text-emerald-700 leading-relaxed">
+                入手した極秘データ(統計・グラフ)とシステムの疑似コードを解析せよ。
+                正解で EXP + G-COIN、初回解読で限定の<span className="text-emerald-400">バグパーツ</span>を回収できる。
+              </div>
+              <div className="text-[10px] text-emerald-600 font-mono mt-2">
+                SOLVED: {decode.filter(m => m.solvedAt).length} / {decode.length}
+              </div>
+            </div>
+
+            {decode.length === 0 ? (
+              <div className="text-emerald-700 text-xs font-mono text-center py-4 border border-emerald-900/30 rounded-xl">
+                データを受信中…
+              </div>
+            ) : (
+              decode.map(m => {
+                const solved = !!m.solvedAt;
+                const isResult = decodeResult?.id === m.id;
+                const kindMeta = m.kind === "DATA"
+                  ? { label: "DATA // 統計・グラフ読解", color: "#34d399" }
+                  : { label: "ALGO // 疑似コード解析", color: "#22d3ee" };
+                return (
+                  <div key={m.id} className="border rounded-xl p-4 bg-black/50" style={{ borderColor: `${kindMeta.color}40` }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: `${kindMeta.color}20`, color: kindMeta.color }}>
+                        {kindMeta.label}
+                      </span>
+                      {solved && <span className="ml-auto text-[9px] text-emerald-500 font-mono">✓ DECODED</span>}
+                    </div>
+                    <div className="text-emerald-200 text-xs font-bold mb-1">{m.title}</div>
+                    <div className="text-[11px] text-emerald-300/70 mb-2 leading-relaxed">{m.brief}</div>
+
+                    {m.dataset && (
+                      <pre className="text-[11px] text-emerald-300 bg-black/60 border border-emerald-900/40 rounded-lg p-2.5 mb-2 overflow-x-auto whitespace-pre font-mono leading-relaxed">
+{m.dataset}
+                      </pre>
+                    )}
+
+                    <div className="text-emerald-100 text-xs mb-2 font-mono">Q: {m.question}</div>
+
+                    {isResult ? (
+                      <div className={`rounded-lg p-3 text-xs font-mono ${decodeResult!.correct ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700/40" : "bg-red-900/40 text-red-300 border border-red-700/40"}`}>
+                        {decodeResult!.correct ? (
+                          <>
+                            <div className="font-bold mb-1">✅ デコード成功！</div>
+                            {(decodeResult!.expGained ?? 0) > 0 && (
+                              <div className="text-emerald-400">+{decodeResult!.expGained} EXP / +{decodeResult!.gcoinGained} G</div>
+                            )}
+                            {decodeResult!.unlockedPart && (
+                              <div className="text-yellow-300 mt-0.5">🧬 バグパーツ解放: {decodeResult!.unlockedPart.emoji} {decodeResult!.unlockedPart.name}</div>
+                            )}
+                            <div className="text-emerald-200/70 mt-1.5 leading-relaxed">{decodeResult!.explanation}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-bold mb-1">❌ 解析失敗。もう一度。</div>
+                            <div className="text-red-200/70 leading-relaxed">{decodeResult!.explanation}</div>
+                          </>
+                        )}
+                      </div>
+                    ) : solved ? (
+                      <div className="text-[11px] text-emerald-600/80 font-mono bg-black/30 rounded-lg p-2 leading-relaxed">
+                        {m.explanation}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {m.choices.map((choice, i) => (
+                          <button
+                            key={i}
+                            onClick={() => answerDecode(m, i)}
+                            className="w-full text-left text-xs font-mono text-emerald-200 bg-black/40 hover:bg-emerald-900/30 border border-emerald-900/40 hover:border-emerald-600/50 rounded-lg px-3 py-2 transition-colors"
+                          >
+                            <span className="text-emerald-600 mr-2">{String.fromCharCode(65 + i)} ▸</span>{choice}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 
@@ -1016,6 +1199,32 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
         {/* ── STATUS ────────────────────────────────────────────── */}
         {tab === "status" && (
           <div className="space-y-3">
+            {/* DARK CHARGE — 匿名スポンサー(親)からの裏口座送金 */}
+            {learning && (learning.parentAlertAt || learning.parentBoosted) && (
+              <div className="border border-fuchsia-500/50 rounded-xl p-4 bg-black/50">
+                <div className="text-[11px] text-fuchsia-400 tracking-widest mb-2">// DARK_CHARGE — 匿名スポンサー</div>
+                {learning.parentBoosted ? (
+                  <div className="font-mono">
+                    <div className="text-fuchsia-200 text-sm font-bold mb-1">💸 裏口座への匿名送金を検知</div>
+                    <div className="text-[11px] text-fuchsia-300/80 leading-relaxed">
+                      正体不明のスポンサーから、お前の計画性(信用)に対して資金が送金された。
+                    </div>
+                    <div className="mt-2 text-[11px] text-emerald-300 bg-emerald-900/20 border border-emerald-700/30 rounded-lg p-2">
+                      ◈ Optisが暗号を翻訳: 「親IDを検知。これは『勉強頑張れよ』という暗号メッセージだ」
+                    </div>
+                  </div>
+                ) : (
+                  <div className="font-mono">
+                    <div className="text-fuchsia-200 text-sm font-bold mb-1 neon-flicker">📡 スポンサーがお前を監視している…</div>
+                    <div className="text-[11px] text-fuchsia-300/80 leading-relaxed">
+                      お前のロジカルレベルが【{learning.layerLabel}】に到達。
+                      正体不明のパトロンが裏口座の送金を検討中だ。解読(DECODE)を続けろ。
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="border border-cyan-500/40 rounded-xl p-4 bg-black/40">
               <div className="text-[11px] text-cyan-500 tracking-widest mb-3">// STATUS_HACK</div>
               <div className="grid grid-cols-2 gap-3 font-mono text-sm">
@@ -1132,6 +1341,45 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           </div>
         )}
       </div>
+
+      {/* ── SECRET DROP — 23:00 ゲリラ・ウィンドウ ──────────────── */}
+      {dropOverlay && (
+        <div className="fixed inset-0 z-[95] bg-black/85 flex items-center justify-center p-6">
+          <CodeRain color="#ef4444" opacity={0.2} />
+          <div className="relative z-10 w-full max-w-sm text-center">
+            {dropReward ? (
+              <div className="reward-pop border border-red-500/60 rounded-2xl p-6 bg-black/70">
+                <div className="text-5xl mb-2">🛰️</div>
+                <div className="text-red-300 font-black text-lg mb-1">サルベージ成功</div>
+                <div className="text-emerald-300 font-mono text-sm">+{dropReward.expGained} EXP / +{dropReward.gcoinGained} G</div>
+                {dropReward.unlockedPart ? (
+                  <div className="text-yellow-300 font-mono text-xs mt-1">🧬 {dropReward.unlockedPart.emoji} {dropReward.unlockedPart.name} を回収</div>
+                ) : (
+                  <div className="text-red-300/80 font-mono text-xs mt-1">{dropReward.label}</div>
+                )}
+                <div className="text-red-500/60 text-[10px] font-mono mt-3 neon-flicker">ルート切断中… 自動ログアウト</div>
+              </div>
+            ) : (
+              <div className="border border-red-500/60 rounded-2xl p-6 bg-black/70">
+                <div className="text-4xl mb-2 animate-pulse">🔴</div>
+                <div className="text-red-400 font-black text-base tracking-widest mb-1 neon-flicker">SECRET DROP DETECTED</div>
+                <div className="text-red-300/80 text-xs leading-relaxed mb-4 font-mono">
+                  海外の学習サーバーへのハッキングルートが<span className="text-red-400 font-bold">60秒間だけ</span>開放された。
+                  レア・アセットを1タップでサルベージ(回収)せよ。
+                </div>
+                <div className="text-red-300 font-mono text-3xl font-black mb-4">{dropCountdown}<span className="text-sm">s</span></div>
+                <button
+                  onClick={claimDrop}
+                  className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-3 rounded-xl text-sm tracking-widest active:scale-95 transition-transform"
+                >
+                  ▸ SALVAGE ◂
+                </button>
+                <button onClick={() => setDropOverlay(false)} className="mt-3 text-red-700 text-[10px] font-mono">ルートを無視する</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

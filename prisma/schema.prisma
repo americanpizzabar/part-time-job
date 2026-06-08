@@ -471,3 +471,23 @@ model BackupSnapshot {
   issuedBy    String   @default("PARENT") // PARENT | AUTO
   createdAt   DateTime @default(now())
 }
+
+// ─── データ・デコード(裏モードのインテリジェンス暗号解読) ────────────────────
+// 統計/グラフ読解(DATA)と疑似コード穴埋め(ALGO)を1タップで解くハッキング風ミッション
+model DecodeMission {
+  id           Int       @id @default(autoincrement())
+  kind         String    // DATA(データ読解) | ALGO(疑似コード)
+  title        String    // ミッション名
+  brief        String    // Optisの導入セリフ
+  dataset      String?   // CSV風/グラフ断片のテキスト(任意)
+  question     String
+  choices      Json      // string[]
+  correctIndex Int
+  explanation  String
+  expReward    Int       @default(40)
+  gcoinReward  Int       @default(15)
+  rewardPartId String?   // 初回クリアで解放するバグパーツID(任意)
+  isActive     Boolean   @default(true)
+  solvedAt     DateTime?
+  createdAt    DateTime  @default(now())
+}
