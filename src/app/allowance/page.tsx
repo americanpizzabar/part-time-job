@@ -80,6 +80,15 @@ export default function AllowancePage() {
     fetchData();
   }
 
+  async function handleRecalculate(period: AllowancePeriod) {
+    await fetch(`/api/allowance/${period.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recalculate: true }),
+    });
+    fetchData();
+  }
+
   const unpaidTotal = periods.filter(p => !p.isPaid).reduce((s, p) => s + p.totalAmount, 0);
 
   return (
@@ -164,6 +173,14 @@ export default function AllowancePage() {
                     >
                       {period.isPaid ? "未払いに戻す" : "支払い済みにする"}
                     </button>
+                    {!period.isPaid && (
+                      <button
+                        onClick={() => handleRecalculate(period)}
+                        className="px-3 py-2.5 rounded-lg text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors font-medium"
+                      >
+                        再集計
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(period)}
                       className="px-4 py-2.5 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"

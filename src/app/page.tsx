@@ -447,35 +447,6 @@ export default function OptisLabPage() {
         </div>
       </div>
 
-      {/* ゴールドメーター: 自分で稼いだ資産 */}
-      <div className="rounded-xl p-3 relative overflow-hidden border border-amber-400/50"
-        style={{ background: "linear-gradient(135deg,#1c1407 0%,#3b2a08 60%,#4a3409 100%)" }}>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🛒</span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-amber-300/80 tracking-wide">自分で稼いだ資産</div>
-            <div className="text-xl font-black text-transparent bg-clip-text"
-              style={{ backgroundImage: "linear-gradient(90deg,#fde68a,#fbbf24,#f59e0b)" }}>
-              {formatJPY(optis.mercariTotal ?? 0)}
-            </div>
-          </div>
-          {optis.traderUnlocked && (
-            <span className="text-[10px] font-bold text-amber-900 px-2 py-1 rounded-full shrink-0"
-              style={{ background: "linear-gradient(90deg,#fbbf24,#f59e0b)", boxShadow: "0 0 10px #fbbf2488" }}>
-              🥽 商人(トレーダー)
-            </span>
-          )}
-        </div>
-        <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
-          <div className="h-full rounded-full animate-pulse"
-            style={{
-              width: `${Math.min(100, ((optis.mercariTotal ?? 0) / 10000) * 100)}%`,
-              background: "linear-gradient(90deg,#f59e0b,#fbbf24,#fde68a)",
-              boxShadow: "0 0 12px #fbbf24cc",
-            }} />
-        </div>
-      </div>
-
       {/* 目標貯金メーター */}
       {topGoal && (
         <Link href="/goals" className="block bg-white rounded-xl border border-gray-200 p-3">
@@ -680,13 +651,12 @@ export default function OptisLabPage() {
         </Link>
         <button
           onClick={() => setShowMercari(true)}
-          className="flex items-center gap-2 rounded-xl border border-amber-400/60 p-3 text-left hover:border-amber-300"
-          style={{ background: "linear-gradient(135deg,#2a1e07,#3b2a08)" }}
+          className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 p-3 text-left hover:border-amber-300"
         >
           <span className="text-2xl">🛒</span>
           <div className="min-w-0">
-            <div className="font-medium text-amber-200 text-sm">メルカリ売上</div>
-            <div className="text-[11px] text-amber-400/70">資産を稼ぐ</div>
+            <div className="font-medium text-gray-800 text-sm">メルカリ売上</div>
+            <div className="text-[11px] text-gray-500">資産を稼ぐ</div>
           </div>
         </button>
         {!optis.activeLoan && (
