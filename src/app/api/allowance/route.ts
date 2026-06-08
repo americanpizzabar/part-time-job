@@ -8,7 +8,33 @@ export async function GET() {
   const periods = await prisma.allowancePeriod.findMany({
     orderBy: { startDate: "desc" },
   });
-  return NextResponse.json(periods);
+
+  // 未払い期間は現在の完了ログで自動的に最新化する(支払済みは記録として固定)。
+  // これにより集計後にお手伝いを完了しても画面の数字がズレない。
+  const refreshed = await Promise.all(
+    periods.map(async (p) => {
+      if (p.isPaid) return p;
+      const { baseAmount, choreAmount, totalAmount, choreDetails } = await calculateAllowance(
+        p.startDate,
+        p.endDate
+      );
+      const snapshot = JSON.stringify(choreDetails);
+      if (
+        p.baseAmount === baseAmount &&
+        p.choreAmount === choreAmount &&
+        p.totalAmount === totalAmount &&
+        p.snapshot === snapshot
+      ) {
+        return p;
+      }
+      return prisma.allowancePeriod.update({
+        where: { id: p.id },
+        data: { baseAmount, choreAmount, totalAmount, snapshot },
+      });
+    })
+  );
+
+  return NextResponse.json(refreshed);
 }
 
 export async function POST(req: Request) {

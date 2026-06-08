@@ -32,20 +32,16 @@ export async function GET(req: Request) {
 
       for (const date of dates) {
         const isScheduled = chore.schedules.some(s => isChoreScheduledForDate(s, date));
-        const extraLogs = chore.logs.filter(l => l.date === date && l.isExtra);
-        const regularLog = chore.logs.find(l => l.date === date && !l.isExtra);
+        // 完了 = その日の完了ログ件数(通常+追加、予定変更後も「やった分」を数える)
+        const completedHere = chore.logs.filter(l => l.date === date && l.completed).length;
 
-        if (isScheduled) {
-          scheduled++;
-          if (regularLog?.completed) completed++;
-        }
-        // 追加お手伝いは完了したものだけカウント
-        for (const extra of extraLogs) {
-          if (extra.completed) {
-            scheduled++;
-            completed++;
-          }
-        }
+        if (isScheduled) scheduled++;
+        completed += completedHere;
+        // 完了したが予定として数えていない分を機会に加える(completed ≤ scheduled を保証)
+        const extraOpportunities = isScheduled
+          ? Math.max(0, completedHere - 1)
+          : completedHere;
+        scheduled += extraOpportunities;
       }
 
       return {
@@ -80,13 +76,11 @@ export async function GET(req: Request) {
       for (const chore of chores) {
         for (const date of weekDates) {
           const isScheduled = chore.schedules.some(s => isChoreScheduledForDate(s, date));
-          const regularLog = chore.logs.find(l => l.date === date && !l.isExtra);
-          const extraLogs = chore.logs.filter(l => l.date === date && l.isExtra && l.completed);
-          if (isScheduled) {
-            ws++;
-            if (regularLog?.completed) { wc++; we += chore.amount; }
-          }
-          for (const _ of extraLogs) { ws++; wc++; we += chore.amount; }
+          const completedHere = chore.logs.filter(l => l.date === date && l.completed).length;
+          if (isScheduled) ws++;
+          wc += completedHere;
+          we += completedHere * chore.amount;
+          ws += isScheduled ? Math.max(0, completedHere - 1) : completedHere;
         }
       }
       weeklyTrend.push({

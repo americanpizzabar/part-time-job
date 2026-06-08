@@ -33,8 +33,10 @@ export async function GET(req: Request) {
     const dayChores = chores
       .filter(chore => {
         const isScheduled = chore.schedules.some(s => isChoreScheduledForDate({ ...s, isActive: s.isActive }, date));
-        const hasExtraLog = chore.logs.some(l => l.date === date && l.isExtra);
-        return isScheduled || hasExtraLog;
+        // 予定 / 追加ログ / 予定変更後に残った完了ログ のいずれかがあれば表示
+        // (完了済みのお手伝いが画面から消えてお小遣いとズレるのを防ぐ)
+        const hasLog = chore.logs.some(l => l.date === date);
+        return isScheduled || hasLog;
       })
       .map(chore => {
         const log = chore.logs.find(l => l.date === date && !l.isExtra);

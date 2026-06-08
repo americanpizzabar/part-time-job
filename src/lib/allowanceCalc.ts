@@ -18,10 +18,15 @@ export interface AllowanceCalcResult {
 /**
  * 期間内のお小遣いを集計する。
  *
- * 重要: 「稼いだ金額」は完了ログの件数だけで決まる。
- * スケジュール状態を再構築してゲートすると、後からスケジュールを
- * 変更した単発タスクや isExtra フラグがズレたログが集計から漏れるため、
- * 完了ログそのものを正として数える。
+ * 単一の正: 「完了した ChoreLog 1件 = その金額を1回稼いだ」。
+ *  - 完了をスケジュール状態でゲートしない。完了後にスケジュールを変更/無効化
+ *    しても「やった分は払う」を保証する。
+ *  - 完了ログの件数をそのまま数えるので、日付の取りこぼし(タイムゾーン等)や
+ *    同日複数ログ(通常+追加)の潰れが起きない。
+ *  - /api/stats・/api/logs と同じ定義を共有して画面間のズレを防ぐ。
+ *
+ * scheduled(予定回数)は表示用の「X/Y回」のためだけに使う。
+ *  予定日数 + 予定外で完了した日数を機会として数え、必ず completed ≤ scheduled になるようにする。
  */
 export async function calculateAllowance(
   startDate: string,
@@ -55,25 +60,32 @@ export async function calculateAllowance(
   let choreAmount = 0;
 
   for (const chore of chores) {
+    // 完了回数 = 完了ログの件数。各 ChoreLog が1回の完了。
+    // 同日に通常+追加の2件があれば2回として扱う(2回やった=2回分払う)。
+    const completedDays = chore.logs.length;
+
+    // 予定回数: 現在のスケジュールでの予定日数
     let scheduledDays = 0;
-    let completedDays = 0;
-
     for (const date of dates) {
-      const isScheduled = chore.schedules.some(s => isChoreScheduledForDate({ ...s }, date));
-      // logs は completed:true で取得済みなので、その日の完了 = ログが存在すること
-      const completedOnDate = chore.logs.some(l => l.date === date);
-
-      if (isScheduled) scheduledDays++;
-      if (completedOnDate) {
-        completedDays++;
-        choreAmount += chore.amount;
-        // 予定外の日に完了した分も「機会」として scheduled に含める(completed ≤ scheduled を保証)
-        if (!isScheduled) scheduledDays++;
+      if (chore.schedules.some(s => isChoreScheduledForDate({ ...s }, date))) {
+        scheduledDays++;
       }
     }
+    // 予定外の日に完了した分も「機会」として加算する
+    const completedDates = new Set(chore.logs.map(l => l.date));
+    for (const date of completedDates) {
+      if (!chore.schedules.some(s => isChoreScheduledForDate({ ...s }, date))) {
+        scheduledDays++;
+      }
+    }
+    // completed ≤ scheduled を必ず保証(同日複数完了などの取りこぼし防止)
+    scheduledDays = Math.max(scheduledDays, completedDays);
+
+    choreAmount += completedDays * chore.amount;
 
     if (scheduledDays > 0 || completedDays > 0) {
-      choreDetails[chore.name] = {
+      // 同名お手伝いでも上書きされないよう chore.id をキーにする
+      choreDetails[String(chore.id)] = {
         name: chore.name,
         amount: chore.amount,
         scheduled: scheduledDays,
