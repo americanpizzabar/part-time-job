@@ -182,7 +182,7 @@ export default function ParentPage() {
       fetch("/api/keyword/all").then(r => r.json()).then(setKeywords).catch(() => {});
       fetch("/api/learning").then(r => r.json()).then(setLearningProfile).catch(() => {});
       fetch("/api/learning/settings").then(r => r.json()).then(setLearnSettings).catch(() => {});
-      fetch("/api/learning/history").then(r => r.json()).then(setHistory).catch(() => {});
+      fetch("/api/learning/history").then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : (d?.rows ?? []))).catch(() => {});
       fetch("/api/learning/accuracy").then(r => r.json()).then(setAccuracy).catch(() => {});
       fetch("/api/backup").then(r=>r.json()).then(setBackupInfo).catch(()=>{});
     } finally {
