@@ -17,6 +17,7 @@ export default function FamilyPage() {
   const [setupNickname, setSetupNickname] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [removingId, setRemovingId] = useState<string | null>(null);
   // 招待コード発行(親)
   const [inviteRole, setInviteRole] = useState<"CHILD" | "PARENT">("CHILD");
   const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string; role: string } | null>(null);
@@ -58,6 +59,17 @@ export default function FamilyPage() {
       if (!r.ok) setError(data.error ?? "セットアップに失敗しました");
       else await load();
     } finally { setBusy(false); }
+  }
+
+  async function removeMember(id: string, nickname: string) {
+    if (!confirm(`「${nickname}」のデバイスを削除しますか？\nそのデバイスからはアクセスできなくなります。`)) return;
+    setRemovingId(id); setError("");
+    try {
+      const r = await fetch(`/api/family/member/${id}`, { method: "DELETE" });
+      const data = await r.json();
+      if (!r.ok) setError(data.error ?? "削除に失敗しました");
+      else await load();
+    } finally { setRemovingId(null); }
   }
 
   async function issueCode(role: "CHILD" | "PARENT") {
@@ -144,13 +156,14 @@ export default function FamilyPage() {
               <div className="text-[10px] font-bold text-gray-400 mb-1.5">親 ({parents.length})</div>
               <div className="space-y-2">
                 {parents.map(m => (
-                  <div key={m.id} className="flex items-center gap-2 text-sm">
-                    <span>🧑‍💼</span>
-                    <span className="text-gray-700 font-medium">{m.nickname}</span>
-                    {m.id === info.member?.id && (
-                      <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5 font-bold">この端末</span>
-                    )}
-                  </div>
+                  <MemberRow
+                    key={m.id}
+                    m={m}
+                    isSelf={m.id === info.member?.id}
+                    isParentActor={info.member?.role === "PARENT"}
+                    removing={removingId === m.id}
+                    onRemove={() => removeMember(m.id, m.nickname)}
+                  />
                 ))}
               </div>
             </div>
@@ -161,13 +174,14 @@ export default function FamilyPage() {
               ) : (
                 <div className="space-y-2">
                   {children.map(m => (
-                    <div key={m.id} className="flex items-center gap-2 text-sm">
-                      <span>🧒</span>
-                      <span className="text-gray-700 font-medium">{m.nickname}</span>
-                      {m.id === info.member?.id && (
-                        <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5 font-bold">この端末</span>
-                      )}
-                    </div>
+                    <MemberRow
+                      key={m.id}
+                      m={m}
+                      isSelf={m.id === info.member?.id}
+                      isParentActor={info.member?.role === "PARENT"}
+                      removing={removingId === m.id}
+                      onRemove={() => removeMember(m.id, m.nickname)}
+                    />
                   ))}
                 </div>
               )}
@@ -240,6 +254,33 @@ export default function FamilyPage() {
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+function MemberRow({ m, isSelf, isParentActor, removing, onRemove }: {
+  m: { id: string; role: string; nickname: string };
+  isSelf: boolean;
+  isParentActor: boolean;
+  removing: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span>{m.role === "PARENT" ? "🧑‍💼" : "🧒"}</span>
+      <span className="text-gray-700 font-medium flex-1">{m.nickname}</span>
+      {isSelf && (
+        <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5 font-bold">この端末</span>
+      )}
+      {isParentActor && !isSelf && (
+        <button
+          onClick={onRemove}
+          disabled={removing}
+          className="text-[10px] text-red-400 hover:text-red-600 font-bold border border-red-200 rounded-full px-2 py-0.5 disabled:opacity-40 transition-colors"
+        >
+          {removing ? "…" : "削除"}
+        </button>
       )}
     </div>
   );
