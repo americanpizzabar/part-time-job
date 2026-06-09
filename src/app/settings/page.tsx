@@ -199,6 +199,20 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {mounted && role === "PARENT" && (
+        <a
+          href="/family"
+          className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-xl">👨‍👩‍👧</span>
+          <div className="flex-1">
+            <div className="text-sm font-medium text-gray-800">家族の設定</div>
+            <div className="text-xs text-gray-400">子の端末を追加・家族メンバーを管理</div>
+          </div>
+          <span className="text-gray-300 text-lg">›</span>
+        </a>
+      )}
     </div>
   );
 }
