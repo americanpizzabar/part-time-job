@@ -227,6 +227,18 @@ export default function SettingsPage() {
           <span className="text-green-300 text-lg">›</span>
         </a>
       )}
+
+      <a
+        href="/family/recover"
+        className="flex items-center gap-3 bg-gray-50 rounded-xl border border-gray-200 p-4 hover:bg-gray-100 transition-colors"
+      >
+        <span className="text-xl">🔑</span>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-gray-600">リカバリーコードで復元</div>
+          <div className="text-xs text-gray-400">親端末をすべて紛失した場合</div>
+        </div>
+        <span className="text-gray-300 text-lg">›</span>
+      </a>
     </div>
   );
 }

@@ -18,6 +18,8 @@ export default function FamilyPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [recoveryCopied, setRecoveryCopied] = useState(false);
   // 招待コード発行(親)
   const [inviteRole, setInviteRole] = useState<"CHILD" | "PARENT">("CHILD");
   const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string; role: string } | null>(null);
@@ -57,7 +59,10 @@ export default function FamilyPage() {
       });
       const data = await r.json();
       if (!r.ok) setError(data.error ?? "セットアップに失敗しました");
-      else await load();
+      else {
+        if (data.recoveryCode) setRecoveryCode(data.recoveryCode);
+        await load();
+      }
     } finally { setBusy(false); }
   }
 
@@ -150,6 +155,36 @@ export default function FamilyPage() {
       ) : (
         /* ── 登録済み: 家族メンバー一覧 + 親なら招待コード発行 ── */
         <>
+          {recoveryCode && (
+            <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🔑</span>
+                <h2 className="font-bold text-amber-800 text-sm">リカバリーコード — 今すぐメモしてください</h2>
+              </div>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                親端末をすべて紛失した場合、このコードでのみアクセスを回復できます。<br />
+                <span className="font-bold">画面を閉じると二度と表示されません。</span>
+              </p>
+              <div className="bg-white rounded-xl border border-amber-300 px-4 py-3 text-center font-mono font-black text-xl tracking-[0.2em] text-gray-800 select-all">
+                {recoveryCode}
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(recoveryCode);
+                  setRecoveryCopied(true);
+                }}
+                className="w-full border border-amber-400 text-amber-800 rounded-xl py-2 text-xs font-bold"
+              >
+                {recoveryCopied ? "✓ コピーしました" : "クリップボードにコピー"}
+              </button>
+              <button
+                onClick={() => setRecoveryCode(null)}
+                className="w-full bg-amber-500 text-white rounded-xl py-2.5 text-xs font-bold"
+              >
+                メモしました — 閉じる
+              </button>
+            </div>
+          )}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
             <h2 className="font-bold text-gray-800 text-sm">{info.family?.name}</h2>
             <div>

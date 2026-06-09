@@ -618,11 +618,12 @@ model DecodeMission {
 // 全データは FamilyID に紐づき、他家族からのアクセスは prisma.ts の
 // テナントガードがサーバー側で一律遮断する。
 model Family {
-  id        String         @id @default(cuid())
-  name      String         @default("マイファミリー")
-  createdAt DateTime       @default(now())
-  members   FamilyMember[]
-  codes     PairingCode[]
+  id               String         @id @default(cuid())
+  name             String         @default("マイファミリー")
+  recoveryCodeHash String?        // bcrypt ハッシュ(平文は保存しない)
+  createdAt        DateTime       @default(now())
+  members          FamilyMember[]
+  codes            PairingCode[]
 }
 
 model FamilyMember {

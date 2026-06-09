@@ -128,6 +128,12 @@ export default function FamilyJoinPage() {
         コードは 10ぷんかん・1かいだけ つかえます。<br />
         うまくいかないときは おうちのひとに あたらしいコードを だしてもらってね。
       </p>
+
+      <div className="border-t border-gray-100 pt-4 text-center">
+        <a href="/family/recover" className="text-xs text-gray-400 underline">
+          親端末をすべて紛失した場合はこちら(リカバリーコードで復元)
+        </a>
+      </div>
     </div>
   );
 }
