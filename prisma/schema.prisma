@@ -14,6 +14,9 @@ model AllowanceConfig {
   startDate String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model AggregationConfig {
@@ -23,6 +26,9 @@ model AggregationConfig {
   weeklyBudget   Int?     // 週予算(マイルストーン・チェスト判定用)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model Chore {
@@ -35,6 +41,9 @@ model Chore {
   logs        ChoreLog[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model ChoreSchedule {
@@ -49,6 +58,9 @@ model ChoreSchedule {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model ChoreLog {
@@ -63,6 +75,9 @@ model ChoreLog {
   updatedAt   DateTime @updatedAt
 
   @@unique([choreId, date, isExtra])
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model AllowancePeriod {
@@ -78,6 +93,9 @@ model AllowancePeriod {
   snapshot    String?  // JSON snapshot of chore logs
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model Transaction {
@@ -97,6 +115,9 @@ model Transaction {
   presentationId    Int?     @unique
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model SavingsGoal {
@@ -110,6 +131,9 @@ model SavingsGoal {
   contributions SavingsTransaction[]
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model SavingsTransaction {
@@ -120,6 +144,9 @@ model SavingsTransaction {
   date      String      // "YYYY-MM-DD"
   memo      String?
   createdAt DateTime    @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model PresentationRequest {
@@ -135,6 +162,9 @@ model PresentationRequest {
   createdAt     DateTime @default(now())
   respondedAt   DateTime?
   updatedAt     DateTime @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // 電子生命体 Optis の状態(シングルトン: 1レコード運用)
@@ -160,6 +190,9 @@ model OptisState {
   traderUnlocked   Boolean   @default(false) // 商人(トレーダー)属性の解放
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // マイ・プロジェクト(クラファン型 親子マッチング投資)
@@ -180,6 +213,9 @@ model Project {
   completedAt      DateTime?
   updatedAt        DateTime              @updatedAt
   contributions    ProjectContribution[]
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model ProjectContribution {
@@ -191,6 +227,9 @@ model ProjectContribution {
   boostStatus String?  // SELF積立がブースト待ち/放出済か: PENDING | RELEASED
   date        String   // "YYYY-MM-DD"
   createdAt   DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ルーレット/チェストの報酬履歴
@@ -202,6 +241,9 @@ model RewardLog {
   label     String
   date      String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // 装備セット（コーデ）保存
@@ -212,6 +254,9 @@ model OutfitSet {
   equippedAura      String
   equippedAccessory String?
   createdAt         DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // 親子連動シークレット・ミッション
@@ -227,6 +272,9 @@ model Mission {
   clearedAt   DateTime?
   approvedAt  DateTime?
   updatedAt   DateTime  @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── ギルド(バジェット同盟) ──────────────────────────────────────────
@@ -237,6 +285,9 @@ model Guild {
   auraColor  String            @default("#06b6d4")
   createdAt  DateTime          @default(now())
   members    GuildMembership[]
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model GuildMembership {
@@ -249,6 +300,9 @@ model GuildMembership {
   createdAt      DateTime @default(now())
 
   @@unique([guildId, nickname])
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── パーツトレード(近距離トークン交換) ─────────────────────────────
@@ -260,6 +314,9 @@ model TradeOffer {
   status      String   @default("OPEN") // OPEN | COMPLETED | EXPIRED
   createdAt   DateTime @default(now())
   expiresAt   DateTime
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── 成果報告(エンジェル投資リターン) ────────────────────────────────
@@ -274,17 +331,24 @@ model OutcomeReport {
   parentNote String?
   createdAt  DateTime @default(now())
   approvedAt DateTime?
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── ダイナミック・マーケット(パーツ価格変動) ─────────────────────────
 model PartMarketPrice {
   id           Int      @id @default(autoincrement())
-  partId       String   @unique
+  partId       String
   currentPrice Int
   totalBought  Int      @default(0)
   totalSold    Int      @default(0)
   updatedAt    DateTime @updatedAt
   history      Json     @default("[]") // [{date,price}]
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@unique([familyId, partId])
+  @@index([familyId])
 }
 
 // ─── メモリーキューブ(転生記録) ────────────────────────────────────────
@@ -298,6 +362,9 @@ model MemoryCube {
   creditScore    Int
   crystallizedAt DateTime @default(now())
   nickname       String?
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── ファミリー・クレジット(家族間ローン) ────────────────────────────
@@ -314,6 +381,9 @@ model FamilyLoan {
   createdAt        DateTime @default(now())
   approvedAt       DateTime?
   completedAt      DateTime?
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── シャドウ・フィード(世界ハック情報) ──────────────────────────────
@@ -326,6 +396,9 @@ model FeedItem {
   isActive    Boolean  @default(true)
   publishedAt DateTime @default(now())
   expiresAt   DateTime?
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── タイムワープ・バンク(仮想銀行) ──────────────────────────────────
@@ -339,6 +412,9 @@ model VirtualBankDeposit {
   interestEarned Int      @default(0)
   createdAt      DateTime @default(now())
   settledAt      DateTime?
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── 時事クイズ + 経済ウェザー ────────────────────────────────────────
@@ -350,6 +426,9 @@ model EconomicWeather {
   isActive    Boolean  @default(true)
   expiresAt   DateTime?
   createdAt   DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model NewsQuiz {
@@ -364,6 +443,9 @@ model NewsQuiz {
   genre        String        @default("CURRENT") // CURRENT(時事) | ECONOMY(経済) | ENGLISH(英語) | LOGIC(論理)
   createdAt    DateTime      @default(now())
   attempts     QuizAttempt[]
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model QuizAttempt {
@@ -379,6 +461,9 @@ model QuizAttempt {
   genre        String   @default("CURRENT") // 出題ジャンル(履歴・分析用)
   questionText String?  // 出題時の問題文スナップショット(履歴表示用)
   createdAt    DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── 模擬インデックスファンド ──────────────────────────────────────────
@@ -392,6 +477,9 @@ model IndexFund {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   txs            IndexFundTx[]
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 model IndexFundTx {
@@ -403,6 +491,9 @@ model IndexFundTx {
   date      String    // "YYYY-MM-DD"
   memo      String?
   createdAt DateTime  @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── 1日1キーワード(知性フラッシュ) ──────────────────────────────────
@@ -416,6 +507,9 @@ model DailyKeyword {
   body      String   // "1ドル=160円時代。輸入品が値上がりし、家計に直撃。"
   date      String   // "YYYY-MM-DD" 表示予定日
   createdAt DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── ワン・ワード・ミッション(英語パズル) ────────────────────────────
@@ -430,6 +524,9 @@ model WordMission {
   isActive     Boolean   @default(true)
   solvedAt     DateTime?
   createdAt    DateTime  @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── 自律式ラーニングプロファイル(シングルトン) ────────────────────
@@ -450,6 +547,9 @@ model LearningProfile {
   levelCap       Int       @default(0)   // 上限レイヤー(0=制限なし/自動, 1=高校まで, 2=大学まで, 3=大人まで)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── メルカリ(フリマ)売上 ─────────────────────────────────────────────
@@ -460,6 +560,9 @@ model MercariSale {
   date      String   // "YYYY-MM-DD"
   transactionId Int? // 紐づく収入トランザクション(編集・削除時に同期)
   createdAt DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── バックアップ・スナップショット(復元コード方式) ────────────────────────
@@ -470,6 +573,9 @@ model BackupSnapshot {
   note        String?  // ラベル(例: "機種変更前")
   issuedBy    String   @default("PARENT") // PARENT | AUTO
   createdAt   DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── マーケット取引履歴(裏モードの投資成績 P&L 計算用) ──────────────────────
@@ -480,6 +586,9 @@ model MarketTrade {
   price     Int      // 支払/受取した Gコイン
   date      String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
 }
 
 // ─── データ・デコード(裏モードのインテリジェンス暗号解読) ────────────────────
@@ -500,4 +609,41 @@ model DecodeMission {
   isActive     Boolean   @default(true)
   solvedAt     DateTime?
   createdAt    DateTime  @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+
+  @@index([familyId])
+}
+
+// ─── マルチテナント(家族コンテナ) ─────────────────────────────────────
+// 全データは FamilyID に紐づき、他家族からのアクセスは prisma.ts の
+// テナントガードがサーバー側で一律遮断する。
+model Family {
+  id        String         @id @default(cuid())
+  name      String         @default("マイファミリー")
+  createdAt DateTime       @default(now())
+  members   FamilyMember[]
+  codes     PairingCode[]
+}
+
+model FamilyMember {
+  id        String   @id @default(cuid())
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId  String
+  role      String   // PARENT | CHILD
+  nickname  String   @default("")
+  token     String   @unique // 端末セッショントークン(httpOnly Cookie)
+  createdAt DateTime @default(now())
+
+  @@index([familyId])
+}
+
+// 親子ペアリング用ワンタイムコード(6桁・有効期限10分・1回使い切り)
+model PairingCode {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique // 6桁数字
+  family    Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 }

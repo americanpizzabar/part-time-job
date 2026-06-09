@@ -7,7 +7,8 @@ import { today } from "@/lib/dateUtils";
 export const dynamic = "force-dynamic";
 
 async function getOrInitPrice(partId: string) {
-  const existing = await prisma.partMarketPrice.findUnique({ where: { partId } });
+  // partId は家族内一意(テナントガードが familyId を自動注入)
+  const existing = await prisma.partMarketPrice.findFirst({ where: { partId } });
   if (existing) return existing;
   const part = PARTS.find(p => p.id === partId);
   if (!part) return null;

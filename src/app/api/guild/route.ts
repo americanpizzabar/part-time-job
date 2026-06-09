@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, resolveFamilyId } from "@/lib/prisma";
 import { currentISOWeek } from "@/lib/optis";
 import { today } from "@/lib/dateUtils";
 
@@ -36,7 +36,8 @@ export async function POST(req: Request) {
     data: {
       name: name.trim(),
       inviteCode,
-      members: { create: { nickname: nickname.trim(), isOwner: true, budgetMetWeek: null } },
+      // ネスト作成はテナントガードの自動注入が効かないため familyId を明示
+      members: { create: { nickname: nickname.trim(), isOwner: true, budgetMetWeek: null, familyId: await resolveFamilyId() } },
     },
     include: { members: true },
   });

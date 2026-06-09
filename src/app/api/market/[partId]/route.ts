@@ -9,7 +9,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partId:
   const part = PARTS.find(p => p.id === partId);
   if (!part) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const priceRow = await prisma.partMarketPrice.findUnique({ where: { partId } });
+  const priceRow = await prisma.partMarketPrice.findFirst({ where: { partId } });
   const base = MARKET_BASE_PRICES[part.rarity];
   const history = (priceRow?.history as { date: string; price: number }[] | null) ?? [];
 
