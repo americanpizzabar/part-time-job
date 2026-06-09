@@ -5,12 +5,11 @@ import { basePrisma, MEMBER_COOKIE, invalidateMemberCache } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-// POST: 子端末が6桁コードで家族に参加
+// POST: 招待コード(6桁)で家族に参加。ロールはコード発行時の指定に従う(子/親どちらも可)
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const code = typeof body.code === "string" ? body.code.trim() : "";
-  const nickname = typeof body.nickname === "string" && body.nickname.trim()
-    ? body.nickname.trim() : "こども";
+  const rawNickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
 
   if (!/^\d{6}$/.test(code)) {
     return NextResponse.json({ error: "6桁の数字コードを入力してください" }, { status: 400 });
@@ -37,9 +36,11 @@ export async function POST(req: Request) {
   const store = await cookies();
   const oldToken = store.get(MEMBER_COOKIE)?.value;
 
+  const role = pairing.role === "PARENT" ? "PARENT" : "CHILD";
+  const nickname = rawNickname || (role === "PARENT" ? "おうちの人" : "こども");
   const token = randomBytes(32).toString("hex");
   const member = await basePrisma.familyMember.create({
-    data: { familyId: pairing.familyId, role: "CHILD", nickname, token },
+    data: { familyId: pairing.familyId, role, nickname, token },
   });
 
   store.set(MEMBER_COOKIE, token, {

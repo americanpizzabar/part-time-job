@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 const CODE_TTL_MS = 10 * 60 * 1000; // 有効期限10分
 
 // POST: 親がワンタイム招待コード(6桁)を発行
-export async function POST() {
+// body.role で招待する相手を指定: "CHILD"(既定) | "PARENT"(もう一人の親)
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const inviteRole = body.role === "PARENT" ? "PARENT" : "CHILD";
   const store = await cookies();
   const token = store.get(MEMBER_COOKIE)?.value;
   if (!token) {
@@ -42,8 +45,8 @@ export async function POST() {
 
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
   await basePrisma.pairingCode.create({
-    data: { code, familyId: member.familyId, expiresAt },
+    data: { code, familyId: member.familyId, role: inviteRole, expiresAt },
   });
 
-  return NextResponse.json({ code, expiresAt }, { status: 201 });
+  return NextResponse.json({ code, expiresAt, role: inviteRole }, { status: 201 });
 }

@@ -208,9 +208,23 @@ export default function SettingsPage() {
           <span className="text-xl">👨‍👩‍👧</span>
           <div className="flex-1">
             <div className="text-sm font-medium text-gray-800">家族の設定</div>
-            <div className="text-xs text-gray-400">子の端末を追加・家族メンバーを管理</div>
+            <div className="text-xs text-gray-400">親・子の端末を追加、家族メンバーを管理</div>
           </div>
           <span className="text-gray-300 text-lg">›</span>
+        </a>
+      )}
+
+      {mounted && role === "CHILD" && (
+        <a
+          href="/family/join"
+          className="flex items-center gap-3 bg-green-50 rounded-xl border-2 border-green-200 p-4 hover:bg-green-100 transition-colors"
+        >
+          <span className="text-xl">🧒</span>
+          <div className="flex-1">
+            <div className="text-sm font-bold text-green-800">招待コードで参加</div>
+            <div className="text-xs text-green-600">おうちのひとに もらった 6つの すうじを いれてね</div>
+          </div>
+          <span className="text-green-300 text-lg">›</span>
         </a>
       )}
     </div>

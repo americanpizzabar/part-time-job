@@ -643,6 +643,7 @@ model PairingCode {
   code      String    @unique // 6桁数字
   family    Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
   familyId  String
+  role      String    @default("CHILD") // 参加者のロール: PARENT | CHILD
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

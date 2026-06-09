@@ -18,11 +18,9 @@ export default function FamilyPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // 招待コード発行(親)
-  const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [inviteRole, setInviteRole] = useState<"CHILD" | "PARENT">("CHILD");
+  const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string; role: string } | null>(null);
   const [remainSec, setRemainSec] = useState(0);
-  // 参加(子)
-  const [joinCode, setJoinCode] = useState("");
-  const [joinNickname, setJoinNickname] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -61,32 +59,19 @@ export default function FamilyPage() {
     } finally { setBusy(false); }
   }
 
-  async function issueCode() {
+  async function issueCode(role: "CHILD" | "PARENT") {
     setBusy(true); setError("");
     try {
-      const r = await fetch("/api/family/pair", { method: "POST" });
+      const r = await fetch("/api/family/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
       const data = await r.json();
       if (!r.ok) setError(data.error ?? "コード発行に失敗しました");
       else {
         setIssuedCode(data);
         setRemainSec(600);
-      }
-    } finally { setBusy(false); }
-  }
-
-  async function join() {
-    setBusy(true); setError("");
-    try {
-      const r = await fetch("/api/family/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: joinCode, nickname: joinNickname || undefined }),
-      });
-      const data = await r.json();
-      if (!r.ok) setError(data.error ?? "参加に失敗しました");
-      else {
-        setJoinCode("");
-        await load();
       }
     } finally { setBusy(false); }
   }
@@ -98,6 +83,9 @@ export default function FamilyPage() {
       </div>
     );
   }
+
+  const parents = info?.family?.members.filter(m => m.role === "PARENT") ?? [];
+  const children = info?.family?.members.filter(m => m.role !== "PARENT") ?? [];
 
   return (
     <div className="px-4 py-6 space-y-4 max-w-md mx-auto">
@@ -111,92 +99,129 @@ export default function FamilyPage() {
       )}
 
       {!info?.member ? (
-        /* ── 未登録: この端末を家族に登録 ── */
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-          <h2 className="font-bold text-gray-800 text-sm">この端末をはじめて登録する</h2>
-          <p className="text-xs text-gray-400">
-            親の端末はここから登録。子の端末は下の「招待コードで参加」を使ってください。
-          </p>
-          <input
-            value={setupNickname}
-            onChange={e => setSetupNickname(e.target.value)}
-            placeholder="ニックネーム(例: パパ)"
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
-          />
-          <button
-            onClick={setup}
-            disabled={busy}
-            className="w-full bg-blue-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50"
-          >
-            親としてセットアップ
-          </button>
-
-          <div className="border-t border-gray-100 pt-3 mt-2 space-y-2">
-            <h3 className="font-bold text-gray-700 text-sm">招待コードで参加(子の端末)</h3>
+        /* ── 未登録: どちらの端末かを選んでもらう ── */
+        <>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+            <h2 className="font-bold text-gray-800 text-sm">🧑‍💼 親の端末をはじめて登録する</h2>
+            <p className="text-xs text-gray-400">
+              最初の1台はここから。あとから親・子の端末を招待コードで何台でも追加できます。
+            </p>
             <input
-              value={joinCode}
-              onChange={e => setJoinCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6桁コード"
-              inputMode="numeric"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm tracking-[0.3em] text-center font-mono"
-            />
-            <input
-              value={joinNickname}
-              onChange={e => setJoinNickname(e.target.value)}
-              placeholder="ニックネーム(例: たろう)"
+              value={setupNickname}
+              onChange={e => setSetupNickname(e.target.value)}
+              placeholder="ニックネーム(例: パパ)"
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
             />
             <button
-              onClick={join}
-              disabled={busy || joinCode.length !== 6}
-              className="w-full bg-green-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50"
+              onClick={setup}
+              disabled={busy}
+              className="w-full bg-blue-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50"
             >
-              家族に参加
+              親としてセットアップ
             </button>
           </div>
-        </div>
+
+          <a
+            href="/family/join"
+            className="flex items-center gap-3 bg-green-50 rounded-2xl border-2 border-green-200 p-4 hover:bg-green-100 transition-colors"
+          >
+            <span className="text-2xl">🧒</span>
+            <div className="flex-1">
+              <div className="text-sm font-bold text-green-800">招待コードをもらった人はこちら</div>
+              <div className="text-xs text-green-600">6桁コードを入力して家族に参加(子・2人目以降の親)</div>
+            </div>
+            <span className="text-green-300 text-lg">›</span>
+          </a>
+        </>
       ) : (
-        /* ── 登録済み: 家族情報 + 親なら招待コード発行 ── */
+        /* ── 登録済み: 家族メンバー一覧 + 親なら招待コード発行 ── */
         <>
-          <div className="bg-white rounded-2xl border border-gray-200 p-5">
-            <h2 className="font-bold text-gray-800 text-sm mb-3">{info.family?.name}</h2>
-            <div className="space-y-2">
-              {info.family?.members.map(m => (
-                <div key={m.id} className="flex items-center gap-2 text-sm">
-                  <span>{m.role === "PARENT" ? "🧑‍💼" : "🧒"}</span>
-                  <span className="text-gray-700 font-medium">{m.nickname}</span>
-                  <span className="text-[10px] text-gray-400">
-                    {m.role === "PARENT" ? "親" : "子"}
-                    {m.id === info.member?.id ? " · この端末" : ""}
-                  </span>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+            <h2 className="font-bold text-gray-800 text-sm">{info.family?.name}</h2>
+            <div>
+              <div className="text-[10px] font-bold text-gray-400 mb-1.5">親 ({parents.length})</div>
+              <div className="space-y-2">
+                {parents.map(m => (
+                  <div key={m.id} className="flex items-center gap-2 text-sm">
+                    <span>🧑‍💼</span>
+                    <span className="text-gray-700 font-medium">{m.nickname}</span>
+                    {m.id === info.member?.id && (
+                      <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5 font-bold">この端末</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-gray-400 mb-1.5">子 ({children.length})</div>
+              {children.length === 0 ? (
+                <p className="text-xs text-gray-300">まだ子の端末が登録されていません</p>
+              ) : (
+                <div className="space-y-2">
+                  {children.map(m => (
+                    <div key={m.id} className="flex items-center gap-2 text-sm">
+                      <span>🧒</span>
+                      <span className="text-gray-700 font-medium">{m.nickname}</span>
+                      {m.id === info.member?.id && (
+                        <span className="text-[10px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5 font-bold">この端末</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
           {info.member.role === "PARENT" && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-              <h2 className="font-bold text-gray-800 text-sm">子の端末を追加</h2>
+              <h2 className="font-bold text-gray-800 text-sm">家族の端末を追加</h2>
               <p className="text-xs text-gray-400">
-                発行したコードを子の端末で入力してもらうと、同じ家族に参加できます。
-                コードは<span className="font-bold">10分間・1回だけ</span>有効です。
+                招待コードを発行して、相手の端末の
+                <span className="font-bold">「設定 → 招待コードで参加」</span>
+                で入力してもらいます。コードは<span className="font-bold">10分間・1回だけ</span>有効。
+                何人でも順番に追加できます。
               </p>
+              <div className="flex gap-2">
+                {([
+                  { value: "CHILD", label: "🧒 子を招待" },
+                  { value: "PARENT", label: "🧑‍💼 親を招待" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setInviteRole(opt.value)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-all
+                      ${inviteRole === opt.value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               {issuedCode ? (
                 <div className="text-center py-3">
+                  <div className="text-[10px] font-bold text-gray-400 mb-1">
+                    {issuedCode.role === "PARENT" ? "🧑‍💼 親用の招待コード" : "🧒 子用の招待コード"}
+                  </div>
                   <div className="text-3xl font-black tracking-[0.3em] text-blue-600 font-mono">
                     {issuedCode.code}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
                     残り {Math.floor(remainSec / 60)}:{String(remainSec % 60).padStart(2, "0")}
                   </div>
+                  <button
+                    onClick={() => issueCode(inviteRole)}
+                    disabled={busy}
+                    className="mt-3 text-xs text-blue-600 font-bold underline disabled:opacity-50"
+                  >
+                    新しいコードを発行し直す
+                  </button>
                 </div>
               ) : (
                 <button
-                  onClick={issueCode}
+                  onClick={() => issueCode(inviteRole)}
                   disabled={busy}
                   className="w-full bg-blue-600 text-white rounded-xl py-3 font-bold text-sm disabled:opacity-50"
                 >
-                  招待コードを発行
+                  {inviteRole === "PARENT" ? "親用の招待コードを発行" : "子用の招待コードを発行"}
                 </button>
               )}
             </div>
