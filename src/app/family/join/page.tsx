@@ -11,7 +11,10 @@ interface FamilyInfo {
 export default function FamilyJoinPage() {
   const [info, setInfo] = useState<FamilyInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("code") ?? "";
+  });
   const [nickname, setNickname] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

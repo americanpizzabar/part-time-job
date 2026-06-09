@@ -21,6 +21,7 @@ export default function FamilyPage() {
   const [inviteRole, setInviteRole] = useState<"CHILD" | "PARENT">("CHILD");
   const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string; role: string } | null>(null);
   const [remainSec, setRemainSec] = useState(0);
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -60,7 +61,7 @@ export default function FamilyPage() {
   }
 
   async function issueCode(role: "CHILD" | "PARENT") {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setQrSvg(null);
     try {
       const r = await fetch("/api/family/pair", {
         method: "POST",
@@ -68,11 +69,12 @@ export default function FamilyPage() {
         body: JSON.stringify({ role }),
       });
       const data = await r.json();
-      if (!r.ok) setError(data.error ?? "コード発行に失敗しました");
-      else {
-        setIssuedCode(data);
-        setRemainSec(600);
-      }
+      if (!r.ok) { setError(data.error ?? "コード発行に失敗しました"); return; }
+      setIssuedCode(data);
+      setRemainSec(600);
+      // QR取得
+      const qr = await fetch(`/api/family/pair/qr?code=${data.code}`);
+      if (qr.ok) setQrSvg(await qr.text());
     } finally { setBusy(false); }
   }
 
@@ -197,20 +199,31 @@ export default function FamilyPage() {
                 ))}
               </div>
               {issuedCode ? (
-                <div className="text-center py-3">
-                  <div className="text-[10px] font-bold text-gray-400 mb-1">
+                <div className="text-center py-2 space-y-2">
+                  <div className="text-[10px] font-bold text-gray-400">
                     {issuedCode.role === "PARENT" ? "🧑‍💼 親用の招待コード" : "🧒 子用の招待コード"}
                   </div>
+                  {qrSvg && (
+                    <div
+                      className="mx-auto w-44 h-44 rounded-2xl overflow-hidden border border-blue-100 bg-white p-2"
+                      dangerouslySetInnerHTML={{ __html: qrSvg }}
+                    />
+                  )}
                   <div className="text-3xl font-black tracking-[0.3em] text-blue-600 font-mono">
                     {issuedCode.code}
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-gray-400">
                     残り {Math.floor(remainSec / 60)}:{String(remainSec % 60).padStart(2, "0")}
                   </div>
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
+                    QRを相手端末のカメラで読み取るか、<br />
+                    <a href="/family/join" className="text-blue-500 font-bold">設定 → 招待コードで参加</a> に
+                    6桁を入力してください。
+                  </p>
                   <button
                     onClick={() => issueCode(inviteRole)}
                     disabled={busy}
-                    className="mt-3 text-xs text-blue-600 font-bold underline disabled:opacity-50"
+                    className="text-xs text-blue-600 font-bold underline disabled:opacity-50"
                   >
                     新しいコードを発行し直す
                   </button>

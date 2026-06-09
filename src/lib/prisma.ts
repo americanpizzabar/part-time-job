@@ -33,7 +33,6 @@ function getBasePrisma(): PrismaClient {
 // 全データは FamilyID に紐づく。Cookie のメンバートークンから家族を解決し、
 // テナントガードが全クエリに familyId を強制注入する(サーバー側一律遮断)。
 
-export const DEFAULT_FAMILY_ID = "default-family";
 export const MEMBER_COOKIE = "optis_member";
 
 // token → familyId のプロセス内キャッシュ(TTL 60秒)
@@ -55,18 +54,15 @@ export function invalidateMemberCache(token?: string) {
 }
 
 // リクエストの Cookie から familyId を解決。
-// トークンなし/無効時は default-family(既存シングル家族デプロイの互換動作)。
+// トークンなし/無効時はエラー(未ペアリング端末からのアクセスを拒否)。
 export async function resolveFamilyId(): Promise<string> {
-  try {
-    const { cookies } = await import("next/headers");
-    const store = await cookies();
-    const token = store.get(MEMBER_COOKIE)?.value;
-    if (!token) return DEFAULT_FAMILY_ID;
-    return (await familyIdForToken(token)) ?? DEFAULT_FAMILY_ID;
-  } catch {
-    // リクエストスコープ外(ビルド時/スクリプト)は default-family
-    return DEFAULT_FAMILY_ID;
-  }
+  const { cookies } = await import("next/headers");
+  const store = await cookies();
+  const token = store.get(MEMBER_COOKIE)?.value;
+  if (!token) throw new Error("UNREGISTERED_DEVICE");
+  const familyId = await familyIdForToken(token);
+  if (!familyId) throw new Error("INVALID_TOKEN");
+  return familyId;
 }
 
 // familyId 列を持つ全テナントモデル。ここに載っていないモデル

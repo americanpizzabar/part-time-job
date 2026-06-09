@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
-import { basePrisma, MEMBER_COOKIE, DEFAULT_FAMILY_ID } from "@/lib/prisma";
+import { basePrisma, MEMBER_COOKIE } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -60,25 +60,9 @@ export async function POST(req: Request) {
     ? body.nickname.trim() : "おうちの人";
 
   const token = randomBytes(32).toString("hex");
-
-  // default-family にまだ誰もいなければ引き継ぐ(既存データの所有権)
-  const defaultFamily = await basePrisma.family.findUnique({
-    where: { id: DEFAULT_FAMILY_ID },
-    include: { _count: { select: { members: true } } },
-  });
-
-  let familyId: string;
-  let claimed = false;
-  if (defaultFamily && defaultFamily._count.members === 0) {
-    familyId = DEFAULT_FAMILY_ID;
-    claimed = true;
-  } else {
-    const family = await basePrisma.family.create({ data: {} });
-    familyId = family.id;
-  }
-
+  const family = await basePrisma.family.create({ data: {} });
   const member = await basePrisma.familyMember.create({
-    data: { familyId, role: "PARENT", nickname, token },
+    data: { familyId: family.id, role: "PARENT", nickname, token },
   });
 
   const store = await cookies();
@@ -87,7 +71,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     member: { id: member.id, role: member.role, nickname: member.nickname },
-    familyId,
-    claimed,
+    familyId: family.id,
   }, { status: 201 });
 }
