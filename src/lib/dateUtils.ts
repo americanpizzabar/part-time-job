@@ -76,6 +76,14 @@ export function currentMonthRange(): { start: string; end: string } {
   return monthRange(now.getFullYear(), now.getMonth());
 }
 
+// 今週の範囲(start=週の開始曜日の直近、end=今日)。startDayOfWeek: 0=日,1=月...
+export function currentWeekRange(startDayOfWeek = 1): { start: string; end: string } {
+  const now = new Date();
+  const diff = (getDay(now) - startDayOfWeek + 7) % 7;
+  const start = addDays(now, -diff);
+  return { start: toDateStr(start), end: toDateStr(now) };
+}
+
 export const DAY_NAMES_JA = ["日", "月", "火", "水", "木", "金", "土"];
 export const MONTH_NAMES_JA = [
   "1月", "2月", "3月", "4月", "5月", "6月",
