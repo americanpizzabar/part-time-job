@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "ホーム", icon: "🏠" },
-  { href: "/chores", label: "お手伝い", icon: "⭐" },
+  { href: "/tasks", label: "お手伝い", icon: "📅" },
   { href: "/budget", label: "かけいぼ", icon: "📒" },
   { href: "/goals", label: "目標", icon: "🎯" },
   { href: "/presentations", label: "おねだり", icon: "🙏" },
   { href: "/more", label: "メニュー", icon: "☰" },
 ];
 
-const moreRoutes = ["/tasks", "/collection", "/projects", "/allowance", "/stats", "/settings", "/parent", "/chronicle", "/portfolio"];
+const moreRoutes = ["/collection", "/projects", "/allowance", "/stats", "/settings", "/parent", "/chronicle", "/portfolio"];
 
 export default function NavBar() {
   const pathname = usePathname();
