@@ -8,6 +8,7 @@ import NeedsWantsPie from "@/components/NeedsWantsPie";
 import MissionManager from "@/components/MissionManager";
 import BoostSequence from "@/components/BoostSequence";
 import AccuracyRadar from "@/components/AccuracyRadar";
+import ChildSwitcher from "@/components/ChildSwitcher";
 import { useRole } from "@/lib/useRole";
 import { projectProgress, boostPerContribution } from "@/lib/optis";
 
@@ -397,6 +398,9 @@ export default function ParentPage() {
           個別の購入履歴（非公開設定分）は表示されません。
         </p>
       </div>
+
+      {/* コックピット型 子供切り替えタブ(子が2人以上のとき表示) */}
+      <ChildSwitcher onSwitch={fetchData} />
 
       {loading ? (
         <div className="flex items-center justify-center h-40">
