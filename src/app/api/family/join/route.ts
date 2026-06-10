@@ -38,9 +38,21 @@ export async function POST(req: Request) {
 
   const role = pairing.role === "PARENT" ? "PARENT" : "CHILD";
   const nickname = rawNickname || (role === "PARENT" ? "おうちの人" : "こども");
+
+  // 子端末は招待コードが指す子プロファイルに紐づく。
+  // 古いコード(childProfileId 無し)は家族の先頭の子にフォールバック。
+  let childProfileId: string | null = null;
+  if (role === "CHILD") {
+    childProfileId = pairing.childProfileId
+      ?? (await basePrisma.childProfile.findFirst({
+        where: { familyId: pairing.familyId }, orderBy: { createdAt: "asc" }, select: { id: true },
+      }))?.id
+      ?? null;
+  }
+
   const token = randomBytes(32).toString("hex");
   const member = await basePrisma.familyMember.create({
-    data: { familyId: pairing.familyId, role, nickname, token },
+    data: { familyId: pairing.familyId, role, nickname, token, childProfileId },
   });
 
   store.set(MEMBER_COOKIE, token, {

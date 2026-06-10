@@ -29,23 +29,55 @@ function getBasePrisma(): PrismaClient {
   return globalForPrisma.prismaBase;
 }
 
-// ─── マルチテナント: 家族コンテナ解決 ──────────────────────────────────
-// 全データは FamilyID に紐づく。Cookie のメンバートークンから家族を解決し、
-// テナントガードが全クエリに familyId を強制注入する(サーバー側一律遮断)。
+// ─── マルチテナント: 家族コンテナ + 子プロファイル解決 ──────────────────
+// 全データは FamilyID に紐づく。さらに「子スコープ」のデータは
+// ChildProfileID にも紐づき、きょうだい間でも完全に分離される。
+// テナントガードが全クエリに familyId(+ 子スコープなら childProfileId)を
+// 強制注入する(サーバー側一律遮断)。
 
 export const MEMBER_COOKIE = "optis_member";
+export const ACTIVE_CHILD_COOKIE = "optis_active_child"; // 親端末が選択中の子
 
-// token → familyId のプロセス内キャッシュ(TTL 60秒)
-const memberCache = new Map<string, { familyId: string; at: number }>();
-const MEMBER_CACHE_TTL = 60_000;
+interface MemberInfo {
+  familyId: string;
+  role: string;
+  childProfileId: string | null;
+}
 
-export async function familyIdForToken(token: string): Promise<string | null> {
+// token → メンバー情報のプロセス内キャッシュ(TTL 60秒)
+const memberCache = new Map<string, { info: MemberInfo; at: number }>();
+// familyId → 先頭の子プロファイルID(親のフォールバック用, TTL 60秒)
+const firstChildCache = new Map<string, { childId: string | null; at: number }>();
+const CACHE_TTL = 60_000;
+
+async function memberForToken(token: string): Promise<MemberInfo | null> {
   const hit = memberCache.get(token);
-  if (hit && Date.now() - hit.at < MEMBER_CACHE_TTL) return hit.familyId;
-  const member = await getBasePrisma().familyMember.findUnique({ where: { token } });
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.info;
+  const member = await getBasePrisma().familyMember.findUnique({
+    where: { token },
+    select: { familyId: true, role: true, childProfileId: true },
+  });
   if (!member) return null;
-  memberCache.set(token, { familyId: member.familyId, at: Date.now() });
-  return member.familyId;
+  const info: MemberInfo = {
+    familyId: member.familyId,
+    role: member.role,
+    childProfileId: member.childProfileId,
+  };
+  memberCache.set(token, { info, at: Date.now() });
+  return info;
+}
+
+async function firstChildForFamily(familyId: string): Promise<string | null> {
+  const hit = firstChildCache.get(familyId);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.childId;
+  const child = await getBasePrisma().childProfile.findFirst({
+    where: { familyId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const childId = child?.id ?? null;
+  firstChildCache.set(familyId, { childId, at: Date.now() });
+  return childId;
 }
 
 export function invalidateMemberCache(token?: string) {
@@ -53,20 +85,52 @@ export function invalidateMemberCache(token?: string) {
   else memberCache.clear();
 }
 
+export function invalidateChildCache(familyId?: string) {
+  if (familyId) firstChildCache.delete(familyId);
+  else firstChildCache.clear();
+}
+
+async function readCookie(name: string): Promise<string | undefined> {
+  const { cookies } = await import("next/headers");
+  const store = await cookies();
+  return store.get(name)?.value;
+}
+
 // リクエストの Cookie から familyId を解決。
 // トークンなし/無効時はエラー(未ペアリング端末からのアクセスを拒否)。
 export async function resolveFamilyId(): Promise<string> {
-  const { cookies } = await import("next/headers");
-  const store = await cookies();
-  const token = store.get(MEMBER_COOKIE)?.value;
+  const token = await readCookie(MEMBER_COOKIE);
   if (!token) throw new Error("UNREGISTERED_DEVICE");
-  const familyId = await familyIdForToken(token);
-  if (!familyId) throw new Error("INVALID_TOKEN");
-  return familyId;
+  const member = await memberForToken(token);
+  if (!member) throw new Error("INVALID_TOKEN");
+  return member.familyId;
+}
+
+// アクティブな子プロファイルIDを解決。
+// - 子端末: 自身が紐づく子プロファイル(固定)
+// - 親端末: optis_active_child Cookie の選択、なければ家族の先頭の子
+export async function resolveActiveChildId(): Promise<string> {
+  const token = await readCookie(MEMBER_COOKIE);
+  if (!token) throw new Error("UNREGISTERED_DEVICE");
+  const member = await memberForToken(token);
+  if (!member) throw new Error("INVALID_TOKEN");
+
+  if (member.role === "CHILD") {
+    if (!member.childProfileId) throw new Error("CHILD_NOT_LINKED");
+    return member.childProfileId;
+  }
+
+  // 親端末: 選択中の子(Cookie)を優先。familyId フィルタと併用するため、
+  // 仮に他家族のIDが入っていても複合条件でヒットしない(漏洩しない)。
+  const active = await readCookie(ACTIVE_CHILD_COOKIE);
+  if (active) return active;
+  const first = await firstChildForFamily(member.familyId);
+  if (!first) throw new Error("NO_CHILD_PROFILE");
+  return first;
 }
 
 // familyId 列を持つ全テナントモデル。ここに載っていないモデル
-// (Family/FamilyMember/PairingCode)はガード対象外。
+// (Family/FamilyMember/PairingCode/ChildProfile)はガード対象外。
 const TENANT_MODELS = new Set([
   "AllowanceConfig", "AggregationConfig", "Chore", "ChoreSchedule", "ChoreLog",
   "AllowancePeriod", "Transaction", "SavingsGoal", "SavingsTransaction", "PresentationRequest",
@@ -77,12 +141,23 @@ const TENANT_MODELS = new Set([
   "BackupSnapshot", "MarketTrade", "DecodeMission",
 ]);
 
+// 子スコープモデル(familyId に加え childProfileId でも分離)。
+// ここに無い TENANT_MODELS は家族共通(familyId のみ)。
+const CHILD_SCOPED_MODELS = new Set([
+  "ChoreLog", "AllowancePeriod", "Transaction", "SavingsGoal", "SavingsTransaction",
+  "PresentationRequest", "OptisState", "Project", "ProjectContribution", "RewardLog",
+  "OutfitSet", "Mission", "GuildMembership", "TradeOffer", "OutcomeReport", "PartMarketPrice",
+  "MemoryCube", "FamilyLoan", "FeedItem", "VirtualBankDeposit", "QuizAttempt", "IndexFund",
+  "IndexFundTx", "WordMission", "LearningProfile", "MercariSale", "BackupSnapshot",
+  "MarketTrade", "DecodeMission",
+]);
+
 const WHERE_OPS = new Set([
   "findFirst", "findFirstOrThrow", "findMany", "count", "aggregate", "groupBy",
   "updateMany", "deleteMany",
 ]);
-// 一意 where にも familyId を追加(extendedWhereUnique)。他家族の id を
-// 直撃指定しても自家族のレコードでなければヒットしない。
+// 一意 where にも familyId/childProfileId を追加(extendedWhereUnique)。他家族・
+// 他きょうだいの id を直撃指定しても、自分のスコープのレコードでなければヒットしない。
 const UNIQUE_WHERE_OPS = new Set([
   "findUnique", "findUniqueOrThrow", "update", "delete", "upsert",
 ]);
@@ -96,20 +171,23 @@ function createTenantPrisma(): PrismaClient {
         async $allOperations({ model, operation, args, query }) {
           if (!model || !TENANT_MODELS.has(model)) return query(args);
           const familyId = await resolveFamilyId();
+          const isChildScoped = CHILD_SCOPED_MODELS.has(model);
+          const scope: Record<string, string> = { familyId };
+          if (isChildScoped) scope.childProfileId = await resolveActiveChildId();
           const a = (args ?? {}) as any;
 
           if (WHERE_OPS.has(operation)) {
-            a.where = { AND: [a.where ?? {}, { familyId }] };
+            a.where = { AND: [a.where ?? {}, scope] };
           } else if (UNIQUE_WHERE_OPS.has(operation)) {
-            a.where = { ...(a.where ?? {}), familyId };
-            if (operation === "upsert" && a.create) a.create.familyId = familyId;
+            a.where = { ...(a.where ?? {}), ...scope };
+            if (operation === "upsert" && a.create) Object.assign(a.create, scope);
           }
 
           if (operation === "create" && a.data) {
-            a.data.familyId = familyId;
+            Object.assign(a.data, scope);
           } else if (operation === "createMany" && a.data) {
             a.data = (Array.isArray(a.data) ? a.data : [a.data]).map((d: any) => ({
-              ...d, familyId,
+              ...d, ...scope,
             }));
           }
 
@@ -136,8 +214,8 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   },
 });
 
-// ガードなしの素のクライアント。Family/FamilyMember/PairingCode の管理
-// (ペアリングAPI)専用。テナントデータには絶対に使わないこと。
+// ガードなしの素のクライアント。Family/FamilyMember/PairingCode/ChildProfile の
+// 管理(ペアリング・子プロファイルAPI)専用。テナントデータには絶対に使わないこと。
 export const basePrisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_, prop) {
     return Reflect.get(getBasePrisma(), prop);

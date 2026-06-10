@@ -73,11 +73,12 @@ model ChoreLog {
   completedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  @@unique([choreId, date, isExtra])
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
+  @@unique([choreId, date, isExtra, childProfileId])
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model AllowancePeriod {
@@ -94,8 +95,10 @@ model AllowancePeriod {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model Transaction {
@@ -116,8 +119,10 @@ model Transaction {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model SavingsGoal {
@@ -132,8 +137,10 @@ model SavingsGoal {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model SavingsTransaction {
@@ -145,8 +152,10 @@ model SavingsTransaction {
   memo      String?
   createdAt DateTime    @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model PresentationRequest {
@@ -163,11 +172,13 @@ model PresentationRequest {
   respondedAt   DateTime?
   updatedAt     DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
-// 電子生命体 Optis の状態(シングルトン: 1レコード運用)
+// 電子生命体 Optis の状態(子プロファイルごとに1レコード)
 model OptisState {
   id               Int       @id @default(autoincrement())
   experience       Int       @default(0)
@@ -191,8 +202,10 @@ model OptisState {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // マイ・プロジェクト(クラファン型 親子マッチング投資)
@@ -214,8 +227,10 @@ model Project {
   updatedAt        DateTime              @updatedAt
   contributions    ProjectContribution[]
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model ProjectContribution {
@@ -228,8 +243,10 @@ model ProjectContribution {
   date        String   // "YYYY-MM-DD"
   createdAt   DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ルーレット/チェストの報酬履歴
@@ -242,8 +259,10 @@ model RewardLog {
   date      String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // 装備セット（コーデ）保存
@@ -255,8 +274,10 @@ model OutfitSet {
   equippedAccessory String?
   createdAt         DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // 親子連動シークレット・ミッション
@@ -273,8 +294,10 @@ model Mission {
   approvedAt  DateTime?
   updatedAt   DateTime  @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── ギルド(バジェット同盟) ──────────────────────────────────────────
@@ -298,11 +321,12 @@ model GuildMembership {
   isOwner        Boolean  @default(false)
   budgetMetWeek  String?  // ISO週番号 "YYYY-Www" - 予算達成した週
   createdAt      DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@unique([guildId, nickname])
-  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
-
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── パーツトレード(近距離トークン交換) ─────────────────────────────
@@ -315,8 +339,10 @@ model TradeOffer {
   createdAt   DateTime @default(now())
   expiresAt   DateTime
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── 成果報告(エンジェル投資リターン) ────────────────────────────────
@@ -332,8 +358,10 @@ model OutcomeReport {
   createdAt  DateTime @default(now())
   approvedAt DateTime?
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── ダイナミック・マーケット(パーツ価格変動) ─────────────────────────
@@ -346,9 +374,11 @@ model PartMarketPrice {
   updatedAt    DateTime @updatedAt
   history      Json     @default("[]") // [{date,price}]
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
-  @@unique([familyId, partId])
+  @@unique([familyId, childProfileId, partId])
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── メモリーキューブ(転生記録) ────────────────────────────────────────
@@ -363,8 +393,10 @@ model MemoryCube {
   crystallizedAt DateTime @default(now())
   nickname       String?
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── ファミリー・クレジット(家族間ローン) ────────────────────────────
@@ -382,8 +414,10 @@ model FamilyLoan {
   approvedAt       DateTime?
   completedAt      DateTime?
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── シャドウ・フィード(世界ハック情報) ──────────────────────────────
@@ -397,8 +431,10 @@ model FeedItem {
   publishedAt DateTime @default(now())
   expiresAt   DateTime?
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── タイムワープ・バンク(仮想銀行) ──────────────────────────────────
@@ -413,8 +449,10 @@ model VirtualBankDeposit {
   createdAt      DateTime @default(now())
   settledAt      DateTime?
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── 時事クイズ + 経済ウェザー ────────────────────────────────────────
@@ -462,8 +500,10 @@ model QuizAttempt {
   questionText String?  // 出題時の問題文スナップショット(履歴表示用)
   createdAt    DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── 模擬インデックスファンド ──────────────────────────────────────────
@@ -478,8 +518,10 @@ model IndexFund {
   updatedAt      DateTime @updatedAt
   txs            IndexFundTx[]
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 model IndexFundTx {
@@ -492,8 +534,10 @@ model IndexFundTx {
   memo      String?
   createdAt DateTime  @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── 1日1キーワード(知性フラッシュ) ──────────────────────────────────
@@ -525,11 +569,13 @@ model WordMission {
   solvedAt     DateTime?
   createdAt    DateTime  @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
-// ─── 自律式ラーニングプロファイル(シングルトン) ────────────────────
+// ─── 自律式ラーニングプロファイル(子プロファイルごとに1レコード) ────────────────────
 model LearningProfile {
   id             Int       @id @default(autoincrement())
   layer          Int       @default(1)   // 現在の難易度レイヤー: 1=高校 2=大学 3=ビジネス
@@ -548,8 +594,10 @@ model LearningProfile {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── メルカリ(フリマ)売上 ─────────────────────────────────────────────
@@ -561,8 +609,10 @@ model MercariSale {
   transactionId Int? // 紐づく収入トランザクション(編集・削除時に同期)
   createdAt DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── バックアップ・スナップショット(復元コード方式) ────────────────────────
@@ -574,8 +624,10 @@ model BackupSnapshot {
   issuedBy    String   @default("PARENT") // PARENT | AUTO
   createdAt   DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── マーケット取引履歴(裏モードの投資成績 P&L 計算用) ──────────────────────
@@ -587,8 +639,10 @@ model MarketTrade {
   date      String   // "YYYY-MM-DD"
   createdAt DateTime @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── データ・デコード(裏モードのインテリジェンス暗号解読) ────────────────────
@@ -610,8 +664,10 @@ model DecodeMission {
   solvedAt     DateTime?
   createdAt    DateTime  @default(now())
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // ─── マルチテナント(家族コンテナ) ─────────────────────────────────────
@@ -624,6 +680,22 @@ model Family {
   createdAt        DateTime       @default(now())
   members          FamilyMember[]
   codes            PairingCode[]
+  children         ChildProfile[]
+}
+
+// 子プロファイル(きょうだいごとの独立セクター)
+// 同じ家族の中で、子供ごとにキャラ・財布・成績データを分離する単位。
+model ChildProfile {
+  id        String         @id @default(cuid())
+  family    Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId  String
+  name      String         @default("こども")
+  avatar    String         @default("🧒") // アイコン絵文字
+  color     String         @default("#3b82f6") // テーマ色(タブ表示用)
+  createdAt DateTime       @default(now())
+  members   FamilyMember[]
+
+  @@index([familyId])
 }
 
 model FamilyMember {
@@ -633,9 +705,13 @@ model FamilyMember {
   role      String   // PARENT | CHILD
   nickname  String   @default("")
   token     String   @unique // 端末セッショントークン(httpOnly Cookie)
+  // CHILD 端末はどの子プロファイルかに紐づく。PARENT は null。
+  childProfile   ChildProfile? @relation(fields: [childProfileId], references: [id], onDelete: SetNull)
+  childProfileId String?
   createdAt DateTime @default(now())
 
   @@index([familyId])
+  @@index([childProfileId])
 }
 
 // 親子ペアリング用ワンタイムコード(6桁・有効期限10分・1回使い切り)
@@ -645,6 +721,7 @@ model PairingCode {
   family    Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
   familyId  String
   role      String    @default("CHILD") // 参加者のロール: PARENT | CHILD
+  childProfileId String? // CHILD コードのとき、参加端末を紐づける子プロファイル
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

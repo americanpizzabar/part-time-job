@@ -9,6 +9,7 @@ const CODE_TTL_MS = 10 * 60 * 1000; // 有効期限10分
 
 // POST: 親がワンタイム招待コード(6桁)を発行
 // body.role で招待する相手を指定: "CHILD"(既定) | "PARENT"(もう一人の親)
+// CHILD のときは body.childId でどの子プロファイルの端末かを指定。
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const inviteRole = body.role === "PARENT" ? "PARENT" : "CHILD";
@@ -23,6 +24,21 @@ export async function POST(req: Request) {
   }
   if (member.role !== "PARENT") {
     return NextResponse.json({ error: "招待コードを発行できるのは親だけです" }, { status: 403 });
+  }
+
+  // CHILD コードは、どの子プロファイルに紐づくかを決める。
+  let childProfileId: string | null = null;
+  if (inviteRole === "CHILD") {
+    const childId = typeof body.childId === "string" ? body.childId : "";
+    const child = childId
+      ? await basePrisma.childProfile.findUnique({ where: { id: childId } })
+      : await basePrisma.childProfile.findFirst({
+          where: { familyId: member.familyId }, orderBy: { createdAt: "asc" },
+        });
+    if (!child || child.familyId !== member.familyId) {
+      return NextResponse.json({ error: "対象の子プロファイルが見つかりません" }, { status: 404 });
+    }
+    childProfileId = child.id;
   }
 
   // 衝突しない6桁コードを生成(暗号学的乱数)
@@ -45,8 +61,8 @@ export async function POST(req: Request) {
 
   const expiresAt = new Date(Date.now() + CODE_TTL_MS);
   await basePrisma.pairingCode.create({
-    data: { code, familyId: member.familyId, role: inviteRole, expiresAt },
+    data: { code, familyId: member.familyId, role: inviteRole, childProfileId, expiresAt },
   });
 
-  return NextResponse.json({ code, expiresAt, role: inviteRole }, { status: 201 });
+  return NextResponse.json({ code, expiresAt, role: inviteRole, childProfileId }, { status: 201 });
 }
