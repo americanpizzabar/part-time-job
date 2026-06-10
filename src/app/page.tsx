@@ -16,6 +16,7 @@ import QuizBanner from "@/components/QuizBanner";
 import MoneyFlow from "@/components/MoneyFlow";
 import SyncBarometer from "@/components/SyncBarometer";
 import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
+import SiblingBattleCard from "@/components/SiblingBattleCard";
 
 interface OptisData {
   experience: number;
@@ -529,6 +530,9 @@ export default function OptisLabPage() {
           </div>
         </div>
       )}
+
+      {/* きょうだいバトル(2人以上のときだけ表示) */}
+      <SiblingBattleCard />
 
       {/* ステータスバー */}
       <div className="grid grid-cols-3 gap-2">
