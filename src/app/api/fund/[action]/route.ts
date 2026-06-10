@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
   const { action } = await params;
   const body = await req.json();
   const todayStr = today();
+
+  // "bonus" は親が子に手動でボーナスを付与する親専用アクション
+  if (action === "bonus") {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
 
   if (action === "withdraw") {
     const { amount } = body as { amount: number };
@@ -94,6 +101,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ action: string }> }) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const { action } = await params;
 
   if (action === "settings") {

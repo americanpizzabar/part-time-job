@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { LOAN_COMPLETE_CREDIT_BOOST } from "@/lib/optis";
 import { getOptisState } from "@/lib/optisServer";
 
@@ -16,6 +17,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     interestPerMonth?: number;
     parentNote?: string;
   };
+
+  // APPROVE/REJECT は親専用。REPAY は子のアクション。
+  if (body.action === "APPROVE" || body.action === "REJECT") {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
 
   const loan = await prisma.familyLoan.findUnique({ where: { id: Number(id) } });
   if (!loan) return NextResponse.json({ error: "not found" }, { status: 404 });

@@ -8,6 +8,7 @@ export default function FamilyRecoverPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [newCode, setNewCode] = useState("");
 
   async function recover() {
     setBusy(true); setError("");
@@ -19,7 +20,7 @@ export default function FamilyRecoverPage() {
       });
       const data = await r.json();
       if (!r.ok) setError(data.error ?? "復元に失敗しました");
-      else setDone(true);
+      else { setDone(true); setNewCode(data.newRecoveryCode ?? ""); }
     } finally { setBusy(false); }
   }
 
@@ -29,6 +30,13 @@ export default function FamilyRecoverPage() {
         <div className="text-5xl">🔓</div>
         <h1 className="text-xl font-bold text-gray-800">アクセスを回復しました</h1>
         <p className="text-sm text-gray-500">この端末が親として再登録されました。</p>
+        {newCode && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-left space-y-2">
+            <p className="text-xs font-bold text-amber-700">⚠️ 新しいリカバリーコード (今度こそ保存してください)</p>
+            <p className="text-lg font-mono font-black tracking-widest text-amber-900 text-center break-all">{newCode}</p>
+            <p className="text-[11px] text-amber-600">旧コードは無効になりました。このコードはここにしか表示されません。</p>
+          </div>
+        )}
         <a href="/family" className="block w-full bg-blue-600 text-white rounded-xl py-3.5 font-bold text-sm">
           家族の設定へ
         </a>

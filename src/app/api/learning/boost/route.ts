@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { getOrCreateLearningProfile } from "@/lib/learningEngine";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const { amount } = await req.json() as { amount: number };
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: "amount required" }, { status: 400 });

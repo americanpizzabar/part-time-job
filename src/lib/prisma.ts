@@ -120,10 +120,15 @@ export async function resolveActiveChildId(): Promise<string> {
     return member.childProfileId;
   }
 
-  // 親端末: 選択中の子(Cookie)を優先。familyId フィルタと併用するため、
-  // 仮に他家族のIDが入っていても複合条件でヒットしない(漏洩しない)。
+  // 親端末: 選択中の子(Cookie)を優先。同一家族の子プロファイルか検証する。
   const active = await readCookie(ACTIVE_CHILD_COOKIE);
-  if (active) return active;
+  if (active) {
+    const child = await getBasePrisma().childProfile.findFirst({
+      where: { id: active, familyId: member.familyId },
+      select: { id: true },
+    });
+    if (child) return child.id;
+  }
   const first = await firstChildForFamily(member.familyId);
   if (!first) throw new Error("NO_CHILD_PROFILE");
   return first;

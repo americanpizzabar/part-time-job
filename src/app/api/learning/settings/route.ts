@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { getOrCreateLearningProfile, LAYER_LABELS } from "@/lib/learningEngine";
 import { LAYER_GRADE_LABEL } from "@/lib/optis";
 
@@ -20,6 +21,9 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const body = (await req.json()) as {
     genreCurrent?: boolean;
     genreEconomy?: boolean;

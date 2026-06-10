@@ -28,9 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "コードが無効または期限切れ" }, { status: 400 });
   }
 
-  const origin = req.headers.get("origin") ?? req.headers.get("x-forwarded-proto")
-    ? `${req.headers.get("x-forwarded-proto")}://${req.headers.get("host")}`
-    : "http://localhost:3000";
+  const origin = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
   const joinUrl = `${origin}/family/join?code=${code}`;
 
   const svg = await QRCode.toString(joinUrl, {

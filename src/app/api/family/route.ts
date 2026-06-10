@@ -17,7 +17,8 @@ const COOKIE_OPTS = {
 // リカバリーコード: 読みやすい大文字英数字 16 文字(O/0/I/1/L を除外)
 function generateRecoveryCode(): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  const bytes = randomBytes(16);
+  return Array.from(bytes, b => chars[b % chars.length]).join("");
 }
 
 async function currentMember() {

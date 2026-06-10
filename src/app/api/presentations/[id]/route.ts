@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { today } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const presentationId = Number(id);
   const body = await req.json();
   const { status, parentMessage, itemName, reason, totalAmount, selfAmount, requestAmount, imageUrl } = body;
+
+  // status 変更(承認/却下)と parentMessage は親専用操作
+  if (status !== undefined || parentMessage !== undefined) {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
 
   const existing = await prisma.presentationRequest.findUnique({ where: { id: presentationId } });
   if (!existing) {

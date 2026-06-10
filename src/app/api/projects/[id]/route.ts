@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { today } from "@/lib/dateUtils";
 import { boostPerContribution } from "@/lib/optis";
 
@@ -25,7 +26,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const project = await prisma.project.findUnique({ where: { id: pid } });
   if (!project) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  // --- 親: 承認 / 却下 ---
+  // --- 親: 承認 / 却下 / ブースト ---
+  if (action === "APPROVE" || action === "REJECT" || action === "BOOST") {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
+
   if (action === "APPROVE") {
     const updated = await prisma.project.update({
       where: { id: pid },
@@ -42,6 +48,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   // --- 子: 計画的積立(プールに回す) ---
+  // (CONTRIBUTE は子のアクションのため requireParent 不要)
   if (action === "CONTRIBUTE") {
     if (project.status !== "ACTIVE") {
       return NextResponse.json({ error: "進行中のプロジェクトではありません" }, { status: 400 });

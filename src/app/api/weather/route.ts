@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { addDays } from "date-fns";
 import { toDateStr } from "@/lib/dateUtils";
 import {
@@ -56,6 +57,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const body = await req.json();
   const { type, magnitude, days, description, expiresAt } = body as {
     type: WeatherType;

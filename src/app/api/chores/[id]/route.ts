@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const { id } = await params;
   const body = await req.json();
   const { name, amount, description, isActive } = body;
@@ -22,6 +26,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const { id } = await params;
   await prisma.chore.delete({ where: { id: Number(id) } });
   return NextResponse.json({ ok: true });

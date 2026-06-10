@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
 
 export const dynamic = "force-dynamic";
 
-// action: APPROVE | REJECT
+// action: APPROVE | REJECT (親専用)
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const deny = await requireParent();
+  if (deny) return deny;
+
   const { id } = await params;
   const { action, parentNote } = await req.json();
 

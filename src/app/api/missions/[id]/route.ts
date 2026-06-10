@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireParent } from "@/lib/requireParent";
 import { today } from "@/lib/dateUtils";
 import { getOptisState, parseUnlocked } from "@/lib/optisServer";
 import { getPart } from "@/lib/optis";
@@ -11,6 +12,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const missionId = Number(id);
   const body = await req.json();
   const { action } = body as { action: "CLEAR" | "APPROVE" | "REJECT" };
+
+  // APPROVE/REJECT は親専用。CLEAR は子のアクション。
+  if (action === "APPROVE" || action === "REJECT") {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
 
   const mission = await prisma.mission.findUnique({ where: { id: missionId } });
   if (!mission) return NextResponse.json({ error: "not found" }, { status: 404 });
