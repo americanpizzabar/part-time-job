@@ -14,6 +14,7 @@ const items = [
   { href: "/portfolio", label: "未来へのポートフォリオ", icon: "📤", desc: "自己投資・実績データをPDF/CSV出力" },
   { href: "/parent", label: "親ビュー", icon: "👪", desc: "残高・支出割合の確認、おねだり承認", parentOnly: true },
   { href: "/settings", label: "設定", icon: "⚙️", desc: "基本お小遣い・集計期間" },
+  { href: "/manual", label: "使いかたガイド", icon: "📖", desc: "アプリの機能を丁寧に解説" },
 ];
 
 export default function MorePage() {
