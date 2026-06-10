@@ -167,8 +167,14 @@ export default function BudgetPage() {
     }
   }
 
-  async function handleDelete(id: number) {
-    const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
+  async function handleDelete(tx: Transaction) {
+    const label = tx.type === "INCOME" ? (tx.memo || "収入") : (tx.category || "支出");
+    const isMercari = tx.source === "MERCARI";
+    const msg = isMercari
+      ? `「${label}」をかけいぼから削除しますか？\nメルカリ売上履歴と累計も同時に削除されます。`
+      : `「${label}」を削除しますか？`;
+    if (!confirm(msg)) return;
+    const res = await fetch(`/api/transactions/${tx.id}`, { method: "DELETE" });
     if (!res.ok) {
       const err = await res.json();
       alert(err.error ?? "削除できませんでした");
@@ -330,8 +336,8 @@ export default function BudgetPage() {
                       <span className={`text-sm font-bold ${t.type === "INCOME" ? "text-blue-600" : "text-red-500"}`}>
                         {t.type === "INCOME" ? "+" : "-"}{formatJPY(t.amount)}
                       </span>
-                      {t.source === "MANUAL" && (
-                        <button onClick={() => handleDelete(t.id)} className="text-gray-300 hover:text-red-500">
+                      {(t.source === "MANUAL" || t.source === "MERCARI") && (
+                        <button onClick={() => handleDelete(t)} className="text-gray-300 hover:text-red-500 p-0.5">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>

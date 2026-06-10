@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, basePrisma } from "@/lib/prisma";
 import { getOptisState } from "@/lib/optisServer";
 
 export const dynamic = "force-dynamic";
@@ -62,9 +62,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "sale not found" }, { status: 404 });
   }
 
+  // basePrisma でテナントガードの childProfileId 制約を回避して確実に削除。
+  // familyId は sale から取得して同一家族のトランザクションのみ削除する。
   if (sale.transactionId) {
-    await prisma.transaction.delete({ where: { id: sale.transactionId } }).catch(() => {});
+    await basePrisma.transaction.delete({
+      where: { id: sale.transactionId },
+    }).catch(() => {});
+  } else {
+    // transactionId が未記録の古いデータ向けフォールバック:
+    // 同日・同額・source=MERCARI のトランザクションを探して削除
+    const linked = await basePrisma.transaction.findFirst({
+      where: { familyId: sale.familyId, source: "MERCARI", amount: sale.amount, date: sale.date },
+    });
+    if (linked) {
+      await basePrisma.transaction.delete({ where: { id: linked.id } }).catch(() => {});
+    }
   }
+
   await prisma.mercariSale.delete({ where: { id: saleId } });
 
   const state = await getOptisState();
