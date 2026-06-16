@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { today, formatJPY } from "@/lib/dateUtils";
 import { addDays, subDays, format } from "date-fns";
+import { useRole } from "@/lib/useRole";
 
 interface AllowancePeriod {
   id: number;
@@ -24,6 +25,8 @@ interface Config {
 }
 
 export default function AllowancePage() {
+  const { role, mounted } = useRole();
+  const isParent = mounted && role === "PARENT";
   const [periods, setPeriods] = useState<AllowancePeriod[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -95,13 +98,20 @@ export default function AllowancePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">お小遣い</h1>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
-        >
-          集計する
-        </button>
+        {isParent && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
+          >
+            集計する
+          </button>
+        )}
       </div>
+      {mounted && !isParent && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
+          📋 集計・支払いの操作は親の端末から行ってください。
+        </div>
+      )}
 
       {unpaidTotal > 0 && (
         <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-4">
@@ -165,29 +175,31 @@ export default function AllowancePage() {
                   {period.notes && (
                     <p className="text-sm text-gray-500 italic">"{period.notes}"</p>
                   )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleTogglePaid(period)}
-                      className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors
-                        ${period.isPaid ? "bg-gray-100 text-gray-600 hover:bg-gray-200" : "bg-green-600 text-white hover:bg-green-700"}`}
-                    >
-                      {period.isPaid ? "未払いに戻す" : "支払い済みにする"}
-                    </button>
-                    {!period.isPaid && (
+                  {isParent && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => handleRecalculate(period)}
-                        className="px-3 py-2.5 rounded-lg text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors font-medium"
+                        onClick={() => handleTogglePaid(period)}
+                        className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors
+                          ${period.isPaid ? "bg-gray-100 text-gray-600 hover:bg-gray-200" : "bg-green-600 text-white hover:bg-green-700"}`}
                       >
-                        再集計
+                        {period.isPaid ? "未払いに戻す" : "支払い済みにする"}
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(period)}
-                      className="px-4 py-2.5 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
-                    >
-                      削除
-                    </button>
-                  </div>
+                      {!period.isPaid && (
+                        <button
+                          onClick={() => handleRecalculate(period)}
+                          className="px-3 py-2.5 rounded-lg text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors font-medium"
+                        >
+                          再集計
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(period)}
+                        className="px-4 py-2.5 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
