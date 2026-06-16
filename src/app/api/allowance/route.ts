@@ -39,9 +39,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const deny = await requireParent();
-  if (deny) return deny;
-
   const body = await req.json();
   const { startDate, endDate, notes } = body;
 

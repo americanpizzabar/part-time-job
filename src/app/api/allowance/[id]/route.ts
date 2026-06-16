@@ -7,13 +7,16 @@ import { calculateAllowance } from "@/lib/allowanceCalc";
 export const dynamic = "force-dynamic";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const deny = await requireParent();
-  if (deny) return deny;
-
   const { id } = await params;
   const periodId = Number(id);
   const body = await req.json();
   const { isPaid, notes, recalculate } = body;
+
+  // 支払い済み操作は親のみ(収入トランザクションを自動計上するため)
+  if (isPaid !== undefined) {
+    const deny = await requireParent();
+    if (deny) return deny;
+  }
 
   // 再集計: 未払い期間を現在の完了ログで再計算する
   if (recalculate) {
