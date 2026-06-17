@@ -112,6 +112,12 @@ model Transaction {
   reportedAt        DateTime? // ユーザー申告の時刻(放課後判定など)
   memo              String?
   imageUrl          String?  // 食事の写真など (data URL)
+  // ランチ写真の栄養解析(category="昼食" のみ)。0..3 のスコア。null=未解析。
+  nutriStaple       Int?     // 主食(炭水化物)
+  nutriProtein      Int?     // 主菜(タンパク質)
+  nutriVeg          Int?     // 副菜(ビタミン・ミネラル)
+  foodTitle         String?  // 称号 (例: プロテイン・マキシマム)
+  foodTitleEmoji    String?  // 称号の絵文字
   isPrivate         Boolean  @default(false) // 親に詳細を見せない
   source            String   @default("MANUAL") // MANUAL | ALLOWANCE | PRESENTATION
   allowancePeriodId Int?     @unique

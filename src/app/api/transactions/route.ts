@@ -4,6 +4,7 @@ import { getOptisState } from "@/lib/optisServer";
 import { EXP_PER_RECORD, EXP_NEEDS_BONUS, AWAKENING_PER_NEEDS, awakeningTier, EN_MODE_EXP_MULTIPLIER, getEquippedEffects } from "@/lib/optis";
 import { generateCareerFeedback } from "@/lib/careerFeedback";
 import { getOrCreateLearningProfile } from "@/lib/learningEngine";
+import { analyzeNutrition } from "@/lib/nutritionAnalyzer";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "needsWants is required for expense" }, { status: 400 });
   }
 
+  // 昼食写真の栄養解析 — category="昼食" + imageUrl ありの場合のみ
+  let nutritionData: { nutriStaple?: number; nutriProtein?: number; nutriVeg?: number; foodTitle?: string; foodTitleEmoji?: string } = {};
+  if (type === "EXPENSE" && category === "昼食" && imageUrl) {
+    try {
+      const result = await analyzeNutrition(imageUrl ?? null, memo ?? null);
+      nutritionData = result;
+    } catch { /* 解析失敗はサイレントに無視 */ }
+  }
+
   const transaction = await prisma.transaction.create({
     data: {
       type,
@@ -49,6 +59,7 @@ export async function POST(req: Request) {
       imageUrl: type === "EXPENSE" ? imageUrl ?? null : null,
       isPrivate: Boolean(isPrivate),
       source: "MANUAL",
+      ...nutritionData,
     },
   });
 

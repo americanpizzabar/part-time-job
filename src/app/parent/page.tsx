@@ -63,6 +63,11 @@ interface LunchRecord {
   memo: string | null;
   imageUrl: string | null;
   createdAt: string;
+  nutriStaple: number | null;
+  nutriProtein: number | null;
+  nutriVeg: number | null;
+  foodTitle: string | null;
+  foodTitleEmoji: string | null;
 }
 
 interface FamilyLoan {
@@ -433,6 +438,30 @@ export default function ParentPage() {
                   <div key={l.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={l.imageUrl!} alt="昼食" className="w-full h-28 object-cover" />
+                    {/* 称号バッジ(栄養解析済みのとき) */}
+                    {l.foodTitle && (
+                      <div className="px-2 pt-1.5 flex items-center gap-1">
+                        <span className="text-sm">{l.foodTitleEmoji}</span>
+                        <span className="text-[10px] font-bold text-indigo-600 truncate">{l.foodTitle}</span>
+                      </div>
+                    )}
+                    {/* 栄養スコアバー(解析済みのとき) */}
+                    {l.nutriStaple !== null && (
+                      <div className="px-2 pt-1 space-y-0.5">
+                        {[
+                          { letter: "C", score: l.nutriStaple, color: "#f59e0b" },
+                          { letter: "P", score: l.nutriProtein ?? 0, color: "#3b82f6" },
+                          { letter: "V", score: l.nutriVeg ?? 0, color: "#10b981" },
+                        ].map(({ letter, score, color }) => (
+                          <div key={letter} className="flex items-center gap-1">
+                            <span className="text-[9px] font-black w-3" style={{ color }}>{letter}</span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${(score / 3) * 100}%`, background: color }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="p-2">
                       <div className="text-xs text-gray-500">{l.date}</div>
                       <div className="text-sm font-bold text-gray-700">{formatJPY(l.amount)}</div>

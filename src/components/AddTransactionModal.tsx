@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { today } from "@/lib/dateUtils";
 import { EXPENSE_CATEGORIES, CATEGORY_ICONS } from "@/lib/budget";
-import ImageUpload from "@/components/ImageUpload";
+import LunchScanCard from "@/components/LunchScanCard";
 
 interface AddTransactionModalProps {
   defaultDate?: string;
@@ -21,6 +21,10 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
   const [isPrivate, setIsPrivate] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [lunchScores, setLunchScores] = useState<{
+    nutriStaple: number | null; nutriProtein: number | null; nutriVeg: number | null;
+    foodTitle: string | null; foodTitleEmoji: string | null;
+  } | null>(null);
 
   const isLunch = type === "EXPENSE" && category === "昼食";
 
@@ -28,7 +32,7 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
     if (!amount || Number(amount) <= 0) return;
     setSaving(true);
     try {
-      await fetch("/api/transactions", {
+      const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -42,6 +46,20 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
           imageUrl: isLunch ? imageUrl : undefined,
         }),
       });
+      // 昼食写真付きのとき、栄養スコアを画面に表示してから閉じる
+      if (isLunch && imageUrl) {
+        const data = await res.json().catch(() => ({}));
+        if (data.nutriStaple !== undefined) {
+          setLunchScores({
+            nutriStaple: data.nutriStaple, nutriProtein: data.nutriProtein, nutriVeg: data.nutriVeg,
+            foodTitle: data.foodTitle ?? null, foodTitleEmoji: data.foodTitleEmoji ?? null,
+          });
+          onSaved();
+          // ホログラム演出を3秒見せてから閉じる
+          setTimeout(() => onClose(), 3200);
+          return;
+        }
+      }
       onSaved();
       onClose();
     } finally {
@@ -138,7 +156,11 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">食べたものの写真</label>
                   <p className="text-xs text-gray-500 mb-2">🍱 昼食の写真は親も見ることができます。</p>
-                  <ImageUpload value={imageUrl} onChange={setImageUrl} allowCapture />
+                  <LunchScanCard
+                    imageUrl={imageUrl}
+                    onImageChange={setImageUrl}
+                    scores={lunchScores}
+                  />
                 </div>
               )}
             </>
