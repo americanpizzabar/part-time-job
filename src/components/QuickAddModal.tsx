@@ -2,8 +2,15 @@
 
 import { useState, useRef } from "react";
 import { today } from "@/lib/dateUtils";
-import { EXPENSE_CATEGORIES } from "@/lib/budget";
+import { EXPENSE_CATEGORIES, QUICK_PRESETS } from "@/lib/budget";
 import { ASSET_CATEGORIES, ASSET_META, AssetCategory } from "@/lib/optis";
+import { playTick, playWhoosh, playCombo, playExpGain } from "@/lib/sound";
+import { hapticTap, hapticHeavy, hapticSuccess, hapticCombo } from "@/lib/haptics";
+import { bumpCombo } from "@/lib/combo";
+import PulseDial from "@/components/PulseDial";
+
+// 重い金額(エネルギー球がずっしり)を判定するしきい値
+const HEAVY_AMOUNT = 3000;
 
 interface QuickAddModalProps {
   onClose: () => void;
@@ -21,12 +28,17 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [assetCategory, setAssetCategory] = useState<AssetCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [careerFeedback, setCareerFeedback] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<"dial" | "keypad">("dial");
+  const [combo, setCombo] = useState(0);
   const dragging = useRef(false);
   const startX = useRef(0);
 
   const amount = Number(digits || "0");
+  const heavy = amount >= HEAVY_AMOUNT;
 
   function press(d: string) {
+    hapticTap();
+    playTick();
     if (d === "del") {
       setDigits(s => s.slice(0, -1));
     } else if (d === "clr") {
@@ -36,6 +48,15 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
       if (digits === "" && d === "0") return;
       setDigits(s => s + d);
     }
+  }
+
+  // 定番ショートカット: 金額+カテゴリを一気に確定して仕分けへ
+  function applyPreset(presetAmount: number, presetCategory: string) {
+    hapticTap();
+    playTick(5);
+    setDigits(String(presetAmount));
+    setCategory(presetCategory);
+    setStep("sort");
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -50,7 +71,8 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   function onPointerUp() {
     if (!dragging.current) return;
     dragging.current = false;
-    const threshold = 70;
+    // 重い金額(エネルギー球がずっしり)はより強いフリックが必要
+    const threshold = heavy ? 110 : 70;
     if (dragX <= -threshold) selectTag("NEEDS");
     else if (dragX >= threshold) selectTag("WANTS");
     else setDragX(0);
@@ -58,6 +80,8 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
 
   function selectTag(tag: "NEEDS" | "WANTS") {
     setCommitted(tag);
+    playWhoosh(tag);
+    hapticSuccess();
     if (tag === "NEEDS") {
       // Show asset category step
       setStep("asset");
@@ -86,6 +110,16 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
       });
       const data = await res.json().catch(() => ({ expGain: 0 }));
       if (data.careerFeedback) setCareerFeedback(data.careerFeedback);
+      // ジャストタイム・コンボを更新して演出
+      const { count } = bumpCombo();
+      setCombo(count);
+      playExpGain();
+      if (count >= 2) {
+        playCombo(count);
+        hapticCombo(count);
+      } else {
+        hapticHeavy();
+      }
       // 吸収アニメーションを見せてから閉じる
       setTimeout(() => {
         onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false, careerFeedback: data.careerFeedback, encounterQuiz: data.encounterQuiz ?? null });
@@ -118,9 +152,23 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
         {/* STEP 1: 金額 */}
         {step === "amount" && (
           <div className="p-5">
-            <div className="text-center text-4xl font-bold text-gray-800 mb-4 tracking-tight">
-              ¥{amount.toLocaleString()}
+            {/* 定番ショートカット(浮遊チップ) */}
+            <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
+              {QUICK_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => applyPreset(p.amount, p.category)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap
+                    bg-gradient-to-br from-cyan-50 to-blue-50 border border-blue-200 text-blue-700 active:scale-95 transition-transform"
+                >
+                  <span>{p.emoji}</span>
+                  <span>{p.label}</span>
+                  <span className="text-blue-400">¥{p.amount}</span>
+                </button>
+              ))}
             </div>
+
+            {/* カテゴリ */}
             <div className="mb-3">
               <div className="flex gap-1.5 overflow-x-auto pb-1">
                 {EXPENSE_CATEGORIES.map(c => (
@@ -135,20 +183,44 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map(k => (
-                <button
-                  key={k}
-                  onClick={() => press(k)}
-                  className={`py-4 rounded-xl text-xl font-semibold transition-colors
-                    ${k === "clr" || k === "del" ? "bg-gray-100 text-gray-500 text-base" : "bg-gray-50 text-gray-800 hover:bg-gray-100"}`}
-                >
-                  {k === "del" ? "⌫" : k === "clr" ? "C" : k}
-                </button>
-              ))}
-            </div>
+
+            {/* 入力モード切替 */}
+            {inputMode === "dial" ? (
+              <div className="py-2">
+                <PulseDial value={amount} onChange={v => setDigits(v === 0 ? "" : String(v))} />
+                <div className="text-center">
+                  <button onClick={() => setInputMode("keypad")} className="text-xs text-gray-400 underline">
+                    キーで入力する
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-center text-4xl font-bold text-gray-800 mb-4 tracking-tight">
+                  ¥{amount.toLocaleString()}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map(k => (
+                    <button
+                      key={k}
+                      onClick={() => press(k)}
+                      className={`py-4 rounded-xl text-xl font-semibold transition-colors
+                        ${k === "clr" || k === "del" ? "bg-gray-100 text-gray-500 text-base" : "bg-gray-50 text-gray-800 hover:bg-gray-100"}`}
+                    >
+                      {k === "del" ? "⌫" : k === "clr" ? "C" : k}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-center mt-2">
+                  <button onClick={() => setInputMode("dial")} className="text-xs text-gray-400 underline">
+                    ダイアルで入力する
+                  </button>
+                </div>
+              </>
+            )}
+
             <button
-              onClick={() => amount > 0 && setStep("sort")}
+              onClick={() => { if (amount > 0) { hapticTap(); setStep("sort"); } }}
               disabled={amount <= 0}
               className="mt-4 w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold disabled:opacity-40"
             >
@@ -183,12 +255,18 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 touch-none cursor-grab active:cursor-grabbing"
-              style={{ transform: `translate(calc(-50% + ${dragX}px), -50%) rotate(${tilt * 12}deg)` }}
+              style={{ transform: `translate(calc(-50% + ${dragX}px), -50%) rotate(${tilt * 12}deg) scale(${heavy ? 1.12 : 1})` }}
             >
-              <div className="bg-white rounded-2xl shadow-2xl border-2 border-gray-200 px-6 py-5 text-center">
+              <div
+                className={`rounded-full shadow-2xl border-2 px-7 py-7 text-center
+                  ${heavy ? "border-amber-300 bg-gradient-to-br from-amber-50 to-orange-100" : "border-gray-200 bg-white"}`}
+                style={heavy ? { boxShadow: "0 12px 40px rgba(245,158,11,0.4)" } : undefined}
+              >
                 <div className="text-2xl font-bold text-gray-800">¥{amount.toLocaleString()}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{category}</div>
-                <div className="text-[10px] text-gray-300 mt-1">← スワイプ →</div>
+                <div className="text-[10px] text-gray-300 mt-1">
+                  {heavy ? "⚡ずっしり…強くスワイプ→" : "← スワイプ →"}
+                </div>
               </div>
             </div>
           </div>
@@ -245,6 +323,12 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
               </div>
             )}
             <p className="text-sm text-gray-500 mt-4">Optisがエネルギーを吸収！</p>
+            {combo >= 2 && (
+              <div className="mt-3 inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-bold px-4 py-1.5 rounded-full shadow-lg reward-pop">
+                <span>🔥</span>
+                <span>{combo}日連続コンボ！</span>
+              </div>
+            )}
           </div>
         )}
         {step === "done" && careerFeedback && (

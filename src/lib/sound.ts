@@ -170,3 +170,44 @@ export function playEquip() {
   tone(1047, t, 0.12, 0.12, "sine", ac);
   tone(1319, t + 0.08, 0.2, 0.1, "sine", ac);
 }
+
+// Tiny click as the pulse-dial / keypad ticks. freq rises slightly with the value
+// so spinning the dial up sounds like a winding-up金庫ダイヤル.
+export function playTick(step = 0) {
+  const ac = getCtx();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const freq = 900 + Math.min(step, 30) * 18;
+  tone(freq, t, 0.04, 0.06, "square", ac);
+}
+
+// Whoosh as the energy ball is flung into Needs (down sweep) or Wants (up sweep)
+export function playWhoosh(dir: "NEEDS" | "WANTS") {
+  const ac = getCtx();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.type = "sawtooth";
+  const [f0, f1] = dir === "WANTS" ? [320, 880] : [520, 180];
+  osc.frequency.setValueAtTime(f0, t);
+  osc.frequency.exponentialRampToValueAtTime(f1, t + 0.35);
+  gain.gain.setValueAtTime(0.14, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  osc.start(t);
+  osc.stop(t + 0.45);
+  noise(t, 0.18, 0.04, ac);
+}
+
+// Combo confirmation — pitch climbs with the streak length for an escalating reward feel
+export function playCombo(level: number) {
+  const ac = getCtx();
+  if (!ac) return;
+  const t = ac.currentTime;
+  const base = 660 + Math.min(level, 12) * 40;
+  tone(base, t, 0.12, 0.16, "triangle", ac);
+  tone(base * 1.25, t + 0.09, 0.16, 0.14, "sine", ac);
+  if (level >= 3) tone(base * 1.5, t + 0.18, 0.22, 0.12, "sine", ac);
+}

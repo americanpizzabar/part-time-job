@@ -21,6 +21,23 @@ export const CATEGORY_ICONS: Record<string, string> = {
 export const NEEDS = "NEEDS";
 export const WANTS = "WANTS";
 
+// 「定番ショートカット」: よく使う支出をワンタップで金額+カテゴリ確定するためのプリセット。
+// QuickAddModal の金額ステップ上部に浮遊チップとして表示する。
+export interface QuickPreset {
+  label: string;
+  amount: number;
+  category: ExpenseCategory;
+  emoji: string;
+}
+
+export const QUICK_PRESETS: QuickPreset[] = [
+  { label: "コンビニ", amount: 300, category: "買い食い", emoji: "🏪" },
+  { label: "自販機", amount: 160, category: "買い食い", emoji: "🥤" },
+  { label: "昼食", amount: 500, category: "昼食", emoji: "🍱" },
+  { label: "文房具", amount: 200, category: "文房具", emoji: "✏️" },
+  { label: "おやつ", amount: 150, category: "買い食い", emoji: "🍩" },
+];
+
 export const PRESENTATION_STATUS = {
   PENDING: "PENDING",
   APPROVED: "APPROVED",
