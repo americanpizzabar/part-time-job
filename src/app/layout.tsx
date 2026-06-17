@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
+import LunchPhotoAlert from "@/components/LunchPhotoAlert";
 
 export const metadata: Metadata = {
   title: "お小遣い管理",
@@ -15,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="ja" className="h-full">
       <body className="min-h-full flex flex-col">
+        <LunchPhotoAlert />
         <NavBar />
         <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 pb-24">
           {children}

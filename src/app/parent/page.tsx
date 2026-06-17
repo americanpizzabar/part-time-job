@@ -62,6 +62,7 @@ interface LunchRecord {
   amount: number;
   memo: string | null;
   imageUrl: string | null;
+  createdAt: string;
 }
 
 interface FamilyLoan {
@@ -175,7 +176,14 @@ export default function ParentPage() {
       ]);
       setBalance(b);
       setPresentations(p);
-      setLunches((l as LunchRecord[]).filter((t: LunchRecord) => t.imageUrl));
+      const photos = (l as LunchRecord[]).filter((t: LunchRecord) => t.imageUrl);
+      setLunches(photos);
+      // 親がお昼セクションをロードした = 既読とみなし、通知バナーをリセット
+      const latestCreatedAt = photos.reduce<string | null>(
+        (acc, t) => (!acc || t.createdAt > acc ? t.createdAt : acc),
+        null
+      );
+      localStorage.setItem("optis_lunch_seen_at", latestCreatedAt ?? new Date().toISOString());
       setProjects(pr);
       setOutcomeReports((outs as OutcomeReport[]).filter(o => o.status === "PENDING"));
       setLoans((ls as FamilyLoan[]).filter(loan => loan.status === "PENDING" || loan.status === "ACTIVE"));
@@ -412,6 +420,30 @@ export default function ParentPage() {
         </div>
       ) : (
         <>
+          {/* 昼食の記録 */}
+          <div>
+            <h2 className="font-bold text-gray-800 mb-2">今月の昼食</h2>
+            {lunches.length === 0 ? (
+              <div className="text-center text-gray-400 py-8 bg-white rounded-xl border border-gray-200">
+                写真付きの昼食記録はありません
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {lunches.map(l => (
+                  <div key={l.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={l.imageUrl!} alt="昼食" className="w-full h-28 object-cover" />
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">{l.date}</div>
+                      <div className="text-sm font-bold text-gray-700">{formatJPY(l.amount)}</div>
+                      {l.memo && <div className="text-xs text-gray-400 truncate">{l.memo}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* 残高サマリー */}
           {balance && (
             <>
@@ -620,30 +652,6 @@ export default function ParentPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* 昼食の記録 */}
-          <div>
-            <h2 className="font-bold text-gray-800 mb-2">今月の昼食</h2>
-            {lunches.length === 0 ? (
-              <div className="text-center text-gray-400 py-8 bg-white rounded-xl border border-gray-200">
-                写真付きの昼食記録はありません
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {lunches.map(l => (
-                  <div key={l.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={l.imageUrl!} alt="昼食" className="w-full h-28 object-cover" />
-                    <div className="p-2">
-                      <div className="text-xs text-gray-500">{l.date}</div>
-                      <div className="text-sm font-bold text-gray-700">{formatJPY(l.amount)}</div>
-                      {l.memo && <div className="text-xs text-gray-400 truncate">{l.memo}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* マイ・プロジェクト 承認/ブースト */}
