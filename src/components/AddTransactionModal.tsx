@@ -153,9 +153,14 @@ export default function AddTransactionModal({ defaultDate, onSaved, onClose }: A
               </div>
 
               {isLunch && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">食べたものの写真</label>
-                  <p className="text-xs text-gray-500 mb-2">🍱 昼食の写真は親も見ることができます。</p>
+                <div className="rounded-xl border-2 border-dashed border-cyan-300 bg-cyan-50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">📸</span>
+                    <div>
+                      <div className="font-bold text-cyan-800 text-sm">ランチの写真を撮ろう！</div>
+                      <div className="text-xs text-cyan-600">栄養バランスをAIがチェックするよ・写真なしでもOK</div>
+                    </div>
+                  </div>
                   <LunchScanCard
                     imageUrl={imageUrl}
                     onImageChange={setImageUrl}

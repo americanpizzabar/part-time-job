@@ -8,6 +8,7 @@ import { playTick, playWhoosh, playCombo, playExpGain } from "@/lib/sound";
 import { hapticTap, hapticHeavy, hapticSuccess, hapticCombo } from "@/lib/haptics";
 import { bumpCombo } from "@/lib/combo";
 import PulseDial from "@/components/PulseDial";
+import LunchScanCard from "@/components/LunchScanCard";
 
 // 重い金額(エネルギー球がずっしり)を判定するしきい値
 const HEAVY_AMOUNT = 3000;
@@ -17,7 +18,7 @@ interface QuickAddModalProps {
   onSaved: (info: { expGain: number; tag: "NEEDS" | "WANTS"; awakened?: boolean; careerFeedback?: string | null; encounterQuiz?: { id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null }) => void;
 }
 
-type Step = "amount" | "sort" | "asset" | "done";
+type Step = "amount" | "sort" | "asset" | "photo" | "done";
 
 export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) {
   const [step, setStep] = useState<Step>("amount");
@@ -30,8 +31,13 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [careerFeedback, setCareerFeedback] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<"dial" | "keypad">("dial");
   const [combo, setCombo] = useState(0);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [lunchScores, setLunchScores] = useState<{ nutriStaple: number | null; nutriProtein: number | null; nutriVeg: number | null; foodTitle: string | null; foodTitleEmoji: string | null } | null>(null);
   const dragging = useRef(false);
   const startX = useRef(0);
+  // photo ステップ到達前に tag/asset を一時保存
+  const pendingTag = useRef<"NEEDS" | "WANTS">("WANTS");
+  const pendingAsset = useRef<AssetCategory | null>(null);
 
   const amount = Number(digits || "0");
   const heavy = amount >= HEAVY_AMOUNT;
@@ -82,15 +88,18 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
     setCommitted(tag);
     playWhoosh(tag);
     hapticSuccess();
+    pendingTag.current = tag;
+    pendingAsset.current = null;
     if (tag === "NEEDS") {
-      // Show asset category step
       setStep("asset");
+    } else if (category === "昼食") {
+      setStep("photo");
     } else {
       commit(tag, null);
     }
   }
 
-  async function commit(tag: "NEEDS" | "WANTS", ac: AssetCategory | null) {
+  async function commit(tag: "NEEDS" | "WANTS", ac: AssetCategory | null, img?: string | null) {
     if (saving) return;
     setSaving(true);
     setStep("done");
@@ -106,11 +115,18 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           assetCategory: ac ?? undefined,
           date: today(),
           reportedAt: new Date().toISOString(),
+          imageUrl: img ?? undefined,
         }),
       });
       const data = await res.json().catch(() => ({ expGain: 0 }));
       if (data.careerFeedback) setCareerFeedback(data.careerFeedback);
-      // ジャストタイム・コンボを更新して演出
+      // 昼食写真付きのとき栄養スコアをホログラム表示
+      if (img && data.nutriStaple !== undefined) {
+        setLunchScores({
+          nutriStaple: data.nutriStaple, nutriProtein: data.nutriProtein, nutriVeg: data.nutriVeg,
+          foodTitle: data.foodTitle ?? null, foodTitleEmoji: data.foodTitleEmoji ?? null,
+        });
+      }
       const { count } = bumpCombo();
       setCombo(count);
       playExpGain();
@@ -120,10 +136,10 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
       } else {
         hapticHeavy();
       }
-      // 吸収アニメーションを見せてから閉じる
+      const delay = img && data.nutriStaple !== undefined ? 3200 : (data.careerFeedback ? 2200 : 700);
       setTimeout(() => {
         onSaved({ expGain: data.expGain ?? 0, tag, awakened: data.awakened ?? false, careerFeedback: data.careerFeedback, encounterQuiz: data.encounterQuiz ?? null });
-      }, data.careerFeedback ? 2200 : 700);
+      }, delay);
     } finally {
       setSaving(false);
     }
@@ -140,6 +156,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
             {step === "amount" ? "いくら使った？"
               : step === "sort" ? "どっち？スワイプで仕分け"
               : step === "asset" ? "どんな自己投資？"
+              : step === "photo" ? "ランチをスキャン📸"
               : step === "done" && careerFeedback ? "AIが分析中…" : "吸収中…"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -284,7 +301,9 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
                     key={ac}
                     onClick={() => {
                       setAssetCategory(ac);
-                      commit("NEEDS", ac);
+                      pendingAsset.current = ac;
+                      if (category === "昼食") setStep("photo");
+                      else commit("NEEDS", ac);
                     }}
                     className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 transition-colors text-left"
                   >
@@ -298,11 +317,40 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
               })}
             </div>
             <button
-              onClick={() => commit("NEEDS", null)}
+              onClick={() => {
+                if (category === "昼食") setStep("photo");
+                else commit("NEEDS", null);
+              }}
               className="mt-3 w-full text-xs text-gray-400 py-2 hover:text-gray-600"
             >
               スキップ
             </button>
+          </div>
+        )}
+
+        {/* STEP 2.7: 昼食写真 */}
+        {step === "photo" && (
+          <div className="p-5">
+            <div className="text-center mb-4">
+              <div className="text-3xl mb-1">📸</div>
+              <div className="font-bold text-gray-800">今日の昼メシを記録しよう！</div>
+              <div className="text-xs text-gray-400 mt-1">写真から栄養バランスをチェックするよ</div>
+            </div>
+            <LunchScanCard imageUrl={imageUrl} onImageChange={setImageUrl} scores={null} />
+            <button
+              onClick={() => commit(pendingTag.current, pendingAsset.current, imageUrl)}
+              className="mt-4 w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold"
+            >
+              {imageUrl ? "📸 記録する" : "写真なしで記録する"}
+            </button>
+            {imageUrl && (
+              <button
+                onClick={() => { setImageUrl(null); commit(pendingTag.current, pendingAsset.current, null); }}
+                className="mt-2 w-full text-xs text-gray-400 py-1.5 hover:text-gray-600"
+              >
+                写真なしでスキップ
+              </button>
+            )}
           </div>
         )}
 
@@ -329,6 +377,11 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
                 <span>{combo}日連続コンボ！</span>
               </div>
             )}
+          </div>
+        )}
+        {step === "done" && lunchScores && (
+          <div className="px-5 pb-5 animate-fade-in">
+            <LunchScanCard imageUrl={imageUrl} onImageChange={() => {}} scores={lunchScores} />
           </div>
         )}
         {step === "done" && careerFeedback && (
