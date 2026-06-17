@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
+import { useRole } from "@/lib/useRole";
 import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour, generationBonus, CRYSTALLIZE_MIN_LEVEL, CRYSTALLIZE_MIN_STAGE } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
 import OptisCreature from "@/components/OptisCreature";
@@ -116,6 +117,7 @@ export default function OptisLabPage() {
   const [syncGenres, setSyncGenres] = useState<{ label: string; accuracy: number }[]>([]);
   const [encounterQuiz, setEncounterQuiz] = useState<{ id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null>(null);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
+  const { role, mounted: roleMounted } = useRole();
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevEvoRef = useRef<{ form: OptisForm; stage: 1 | 2 | 3 } | null>(null);
@@ -193,16 +195,17 @@ export default function OptisLabPage() {
       .catch(() => {});
   }, [fetchAll]);
 
-  // NMDダイアログ: 21時以降、当日未回答なら1回表示
+  // NMDダイアログ: 21時以降、当日未回答なら1回表示（子供のみ）
   useEffect(() => {
     if (!optis) return;
+    if (!roleMounted || role !== "CHILD") return;
     const now = new Date();
     if (now.getHours() < 21) return;
     const key = `nmd-asked-${new Date().toISOString().slice(0, 10)}`;
     if (!optis.nmdToday && !localStorage.getItem(key)) {
       setNmdAsk(true);
     }
-  }, [optis]);
+  }, [optis, role, roleMounted]);
 
   // シェイク検知
   useEffect(() => {
@@ -468,7 +471,7 @@ export default function OptisLabPage() {
     );
   }
 
-  if (darkWeb) {
+  if (darkWeb && role === "CHILD") {
     return <DarkWebPanel optis={optis} onExit={() => setDarkWeb(false)} onChanged={fetchAll} />;
   }
 
@@ -478,7 +481,7 @@ export default function OptisLabPage() {
 
   return (
     <div className="space-y-4 relative">
-      {keyword && (
+      {keyword && role === "CHILD" && (
         <div
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center cursor-pointer"
           style={{ background: KEYWORD_GRADIENT[keyword.gradient as keyof typeof KEYWORD_GRADIENT] || KEYWORD_GRADIENT.economy }}
@@ -943,7 +946,7 @@ export default function OptisLabPage() {
       )}
 
       {showAdd && <QuickAddModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
-      {showRoulette && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}
+      {showRoulette && role === "CHILD" && <RouletteModal onClose={() => { setShowRoulette(false); fetchAll(); }} />}
 
       {breakdown && (
         <BreakdownDrawer
@@ -1031,7 +1034,7 @@ export default function OptisLabPage() {
       )}
 
       {/* エンカウンタークイズオーバーレイ */}
-      {encounterQuiz && (
+      {encounterQuiz && role === "CHILD" && (
         <div className="fixed inset-0 bg-black/70 flex items-end z-50">
           <div className={`w-full max-w-md mx-auto rounded-t-2xl p-5 ${encounterQuiz.isHot ? "bg-gradient-to-b from-red-900 to-gray-900" : "bg-gray-900"}`}>
             {encounterQuiz.isHot && (
@@ -1075,7 +1078,7 @@ export default function OptisLabPage() {
       )}
 
       {/* NMDダイアログ */}
-      {nmdAsk && (
+      {nmdAsk && role === "CHILD" && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
             <div className="text-3xl mb-2">🌙</div>
