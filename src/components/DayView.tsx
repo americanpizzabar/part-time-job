@@ -28,9 +28,10 @@ interface DayViewProps {
   isToday: boolean;
   isExpanded?: boolean;
   onRefresh: () => void;
+  isParent?: boolean;
 }
 
-export default function DayView({ day, isToday, isExpanded = false, onRefresh }: DayViewProps) {
+export default function DayView({ day, isToday, isExpanded = false, onRefresh, isParent = false }: DayViewProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [collapsed, setCollapsed] = useState(!isExpanded && !isToday);
 
@@ -99,6 +100,9 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh }:
           </div>
           {isToday && (
             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">今日</span>
+          )}
+          {isParent && (
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">✏️ 修整</span>
           )}
         </div>
 

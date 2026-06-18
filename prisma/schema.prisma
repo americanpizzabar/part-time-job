@@ -92,6 +92,8 @@ model AllowancePeriod {
   paidAt      DateTime?
   notes       String?
   snapshot    String?  // JSON snapshot of chore logs
+  bonusAmount Float    @default(0)  // 親が追加するボーナス
+  bonusMemo   String?               // ボーナス理由メモ
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID

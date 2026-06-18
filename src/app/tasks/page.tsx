@@ -6,6 +6,7 @@ import { addDays, subDays, getDay, getDaysInMonth } from "date-fns";
 import { today, toDateStr, formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import DayView from "@/components/DayView";
 import BalanceCard from "@/components/BalanceCard";
+import { useRole } from "@/lib/useRole";
 
 interface ChoreItem {
   id: number;
@@ -84,6 +85,8 @@ function computeRange(
 }
 
 export default function TasksPage() {
+  const { role, mounted } = useRole();
+  const isParent = mounted && role === "PARENT";
   const [days, setDays] = useState<DayData[]>([]);
   const [rangeIndex, setRangeIndex] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -190,6 +193,13 @@ export default function TasksPage() {
         </Link>
       )}
 
+      {isParent && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-amber-800">
+          <span className="text-base">✏️</span>
+          <span><span className="font-semibold">親の修整モード</span> — お手伝いの完了状態を変更できます</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-1">
         <h1 className="text-xl font-bold text-gray-800">お手伝いカレンダー</h1>
         <div className="text-right">
@@ -265,6 +275,7 @@ export default function TasksPage() {
               isToday={day.date === today()}
               isExpanded={rangeIndex === 0 || day.date === today()}
               onRefresh={fetchData}
+              isParent={isParent}
             />
           ))}
         </div>

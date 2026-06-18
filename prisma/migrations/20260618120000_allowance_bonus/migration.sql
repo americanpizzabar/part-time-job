@@ -1,0 +1,2 @@
+ALTER TABLE "AllowancePeriod" ADD COLUMN "bonusAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "AllowancePeriod" ADD COLUMN "bonusMemo"   TEXT;
