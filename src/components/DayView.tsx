@@ -9,6 +9,7 @@ interface ChoreItem {
   id: number;
   name: string;
   amount: number;
+  amountOverride?: number | null;
   description?: string | null;
   isScheduled: boolean;
   logId: number | null;
@@ -42,7 +43,7 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
 
   const completedCount = day.chores.filter(c => c.completed).length;
   const totalCount = day.chores.length;
-  const completedAmount = day.chores.filter(c => c.completed).reduce((s, c) => s + c.amount, 0);
+  const completedAmount = day.chores.filter(c => c.completed).reduce((s, c) => s + (c.amountOverride ?? c.amount), 0);
 
   async function handleToggle(chore: ChoreItem) {
     if (chore.logId === null) {
@@ -81,6 +82,16 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
       await fetch(`/api/logs/${chore.logId}`, { method: "DELETE" });
       onRefresh();
     }
+  }
+
+  async function handleEditAmount(chore: ChoreItem, newAmount: number | null) {
+    if (!chore.logId) return;
+    await fetch(`/api/logs/${chore.logId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amountOverride: newAmount }),
+    });
+    onRefresh();
   }
 
   return (
@@ -142,6 +153,8 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
               date={day.date}
               onToggle={handleToggle}
               onRemoveExtra={chore.isExtra ? handleRemoveExtra : undefined}
+              isParent={isParent}
+              onEditAmount={isParent && chore.logId !== null ? handleEditAmount : undefined}
             />
           ))}
           <button

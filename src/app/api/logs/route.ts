@@ -42,10 +42,12 @@ export async function GET(req: Request) {
         const log = chore.logs.find(l => l.date === date && !l.isExtra);
         const extraLog = chore.logs.find(l => l.date === date && l.isExtra);
         const isScheduled = chore.schedules.some(s => isChoreScheduledForDate({ ...s, isActive: s.isActive }, date));
+        const amountOverride = log?.amountOverride ?? extraLog?.amountOverride ?? null;
         return {
           id: chore.id,
           name: chore.name,
           amount: chore.amount,
+          amountOverride: amountOverride !== undefined ? amountOverride : null,
           description: chore.description,
           isScheduled,
           logId: log?.id ?? extraLog?.id ?? null,
@@ -57,7 +59,7 @@ export async function GET(req: Request) {
 
     const totalAmount = dayChores
       .filter(c => c.completed)
-      .reduce((sum, c) => sum + c.amount, 0);
+      .reduce((sum, c) => sum + (c.amountOverride ?? c.amount), 0);
 
     return { date, chores: dayChores, totalAmount };
   });

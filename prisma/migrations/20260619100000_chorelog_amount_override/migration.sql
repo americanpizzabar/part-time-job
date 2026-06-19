@@ -1,0 +1,1 @@
+ALTER TABLE "ChoreLog" ADD COLUMN "amountOverride" DOUBLE PRECISION;

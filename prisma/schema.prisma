@@ -75,6 +75,7 @@ model ChoreLog {
   updatedAt   DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
   childProfileId String? // 子プロファイル(きょうだい別データ分離)
+  amountOverride Float?  // 親が設定した個別金額。null = Chore.amount を使用
 
   @@unique([choreId, date, isExtra, childProfileId])
   @@index([familyId])

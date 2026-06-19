@@ -6,14 +6,21 @@ export const dynamic = "force-dynamic";
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { completed } = body;
+  const { completed, amountOverride } = body;
+
+  const data: Record<string, unknown> = {};
+  if (completed !== undefined) {
+    data.completed = completed;
+    data.completedAt = completed ? new Date() : null;
+  }
+  if (amountOverride !== undefined) {
+    // null = リセット(Chore.amount に戻す), 数値 = 個別上書き
+    data.amountOverride = amountOverride === null ? null : Number(amountOverride);
+  }
 
   const log = await prisma.choreLog.update({
     where: { id: Number(id) },
-    data: {
-      completed,
-      completedAt: completed ? new Date() : null,
-    },
+    data,
   });
   return NextResponse.json(log);
 }

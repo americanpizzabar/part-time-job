@@ -63,6 +63,11 @@ export async function calculateAllowance(
     // 完了回数 = 完了ログの件数。各 ChoreLog が1回の完了。
     // 同日に通常+追加の2件があれば2回として扱う(2回やった=2回分払う)。
     const completedDays = chore.logs.length;
+    // 実効金額: 親が amountOverride を設定している場合はそれを使用する
+    const logSum = chore.logs.reduce(
+      (s, log) => s + ((log as { amountOverride?: number | null }).amountOverride ?? chore.amount),
+      0
+    );
 
     // 予定回数: 現在のスケジュールでの予定日数
     let scheduledDays = 0;
@@ -81,7 +86,7 @@ export async function calculateAllowance(
     // completed ≤ scheduled を必ず保証(同日複数完了などの取りこぼし防止)
     scheduledDays = Math.max(scheduledDays, completedDays);
 
-    choreAmount += completedDays * chore.amount;
+    choreAmount += logSum;
 
     if (scheduledDays > 0 || completedDays > 0) {
       // 同名お手伝いでも上書きされないよう chore.id をキーにする
