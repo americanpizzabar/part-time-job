@@ -9,6 +9,7 @@ import { hapticTap, hapticHeavy, hapticSuccess, hapticCombo } from "@/lib/haptic
 import { bumpCombo } from "@/lib/combo";
 import PulseDial from "@/components/PulseDial";
 import LunchScanCard from "@/components/LunchScanCard";
+import { recordUsage, getRankedPresets, DynamicPreset } from "@/lib/presetStats";
 
 // 重い金額(エネルギー球がずっしり)を判定するしきい値
 const HEAVY_AMOUNT = 3000;
@@ -31,6 +32,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [careerFeedback, setCareerFeedback] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<"dial" | "keypad">("dial");
   const [combo, setCombo] = useState(0);
+  const [orderedPresets] = useState<DynamicPreset[]>(() => getRankedPresets());
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [lunchScores, setLunchScores] = useState<{ nutriStaple: number | null; nutriProtein: number | null; nutriVeg: number | null; foodTitle: string | null; foodTitleEmoji: string | null } | null>(null);
   const dragging = useRef(false);
@@ -127,6 +129,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           foodTitle: data.foodTitle ?? null, foodTitleEmoji: data.foodTitleEmoji ?? null,
         });
       }
+      recordUsage(amount, category);
       const { count } = bumpCombo();
       setCombo(count);
       playExpGain();
@@ -171,9 +174,9 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           <div className="p-5">
             {/* 定番ショートカット(浮遊チップ) */}
             <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
-              {QUICK_PRESETS.map(p => (
+              {orderedPresets.map(p => (
                 <button
-                  key={p.label}
+                  key={`${p.amount}_${p.category}`}
                   onClick={() => applyPreset(p.amount, p.category)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap
                     bg-gradient-to-br from-cyan-50 to-blue-50 border border-blue-200 text-blue-700 active:scale-95 transition-transform"
