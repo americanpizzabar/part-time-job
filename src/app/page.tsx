@@ -471,7 +471,7 @@ export default function OptisLabPage() {
     );
   }
 
-  if (darkWeb && role === "CHILD") {
+  if (darkWeb) {
     return <DarkWebPanel optis={optis} onExit={() => setDarkWeb(false)} onChanged={fetchAll} />;
   }
 
