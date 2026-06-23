@@ -25,27 +25,26 @@ export async function GET() {
     }
   }
 
-  const derived = await computeDerived(state.experience, state.awakening, state.generation);
   const unlocked = parseUnlocked(state.unlockedParts);
   const frozen = !!(state.freezeUntil && state.freezeUntil > new Date());
-
-  // 物欲アーカイブ: 貯金として我慢できた金額の総計
-  const savings = await prisma.savingsTransaction.findMany({ orderBy: { date: "desc" } });
-  const resistedTotal = savings.reduce((s, t) => s + (t.amount > 0 ? t.amount : 0), 0);
-
   const todayStr = today();
 
-  const activeLoan = await prisma.familyLoan.findFirst({
-    where: { status: "ACTIVE" },
-    orderBy: { approvedAt: "desc" },
-  });
-  const crystalCount = await prisma.memoryCube.count();
+  const [derived, savings, activeLoan, crystalCount, shieldAttempt] = await Promise.all([
+    computeDerived(state.experience, state.awakening, state.generation),
+    prisma.savingsTransaction.findMany({ orderBy: { date: "desc" } }),
+    prisma.familyLoan.findFirst({
+      where: { status: "ACTIVE" },
+      orderBy: { approvedAt: "desc" },
+    }),
+    prisma.memoryCube.count(),
+    prisma.quizAttempt.findFirst({
+      where: { correct: true, shieldUntil: { gt: new Date() } },
+      orderBy: { shieldUntil: "desc" },
+    }),
+  ]);
 
-  // Check active quiz shield
-  const shieldAttempt = await prisma.quizAttempt.findFirst({
-    where: { correct: true, shieldUntil: { gt: new Date() } },
-    orderBy: { shieldUntil: "desc" },
-  });
+  // 物欲アーカイブ: 貯金として我慢できた金額の総計
+  const resistedTotal = savings.reduce((s, t) => s + (t.amount > 0 ? t.amount : 0), 0);
   const hasQuizShield = !!shieldAttempt;
 
   return NextResponse.json({
