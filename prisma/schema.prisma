@@ -24,6 +24,10 @@ model AggregationConfig {
   periodDays     Int      @default(7)
   startDayOfWeek Int      @default(1) // 0=Sun, 1=Mon
   weeklyBudget   Int?     // 週予算(マイルストーン・チェスト判定用)
+  // デイリー報酬クイズ(日給・インテリジェンス投資)の親設定
+  quizBonusPerCorrect Float   @default(0)  // 1問正解あたりの基本ボーナス(円・10円単位)。0で機能OFF
+  quizBonusDailyCap   Float?               // 1日あたり上限(例:100円)。null=上限なし
+  quizBonusHardBoost  Float   @default(0)  // 黒ポッド(高難度)時の上乗せ上限キャップ(円)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
@@ -208,6 +212,7 @@ model OptisState {
   wisdomPoints     Int       @default(0) // 知性ポイント
   mercariTotal     Int       @default(0) // メルカリ等で自力で稼いだ累計(能動的収入)
   traderUnlocked   Boolean   @default(false) // 商人(トレーダー)属性の解放
+  rawData          Int       @default(0) // 生データ(未精製ソースコード): パーツ分解で得る錬金素材
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
@@ -675,6 +680,59 @@ model DecodeMission {
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
   childProfileId String? // 子プロファイル(きょうだい別データ分離)
 
+  @@index([familyId])
+  @@index([childProfileId])
+}
+
+// ─── デイリー報酬クイズ: ボーナスプール台帳(1日1件・冪等) ────────────────
+// 正解ごとに記録され、週末に親が AllowancePeriod へ精算 or 手渡し済みにする。
+model QuizBonusEarning {
+  id              Int       @id @default(autoincrement())
+  amount          Float     // 加算されたボーナス額(円)
+  isHardPod       Boolean   @default(false) // 黒ポッド(高難度)由来か
+  earnedDate      String    // "YYYY-MM-DD"(1日1件保証)
+  settledAt       DateTime? // 精算済み時刻(null=未精算)
+  settledPeriodId Int?      // お小遣いに上乗せした場合の AllowancePeriod ID
+  createdAt       DateTime  @default(now())
+  familyId  String   @default("default-family")
+  childProfileId String?
+
+  @@unique([familyId, childProfileId, earnedDate])
+  @@index([familyId])
+  @@index([childProfileId])
+}
+
+// ─── シャドウ・チェイサー(週替わりAIライバル) ───────────────────────────
+// 週初に現レベル近傍のAIゴーストが選出され、週末に超えると限定パーツを略奪できる。
+model ShadowGhost {
+  id           Int       @id @default(autoincrement())
+  weekKey      String    // currentISOWeek() "YYYY-Www"
+  name         String    // ハッカーネーム
+  level        Int
+  brainType    String    // IMPULSIVE | ANALYTICAL | FRUGAL | BALANCED
+  targetScore  Float     // 週末に超えるべき知性・やりくりスコア(0-100)
+  rewardPartId String    // 勝利で奪える限定パーツID
+  defeated     Boolean   @default(false)
+  claimedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  familyId  String   @default("default-family")
+  childProfileId String?
+
+  @@unique([familyId, childProfileId, weekKey])
+  @@index([familyId])
+  @@index([childProfileId])
+}
+
+// ─── メインフレーム・クラッキング(隔週ソロ攻略の解答記録) ──────────────────
+model MainframeSolve {
+  id        Int      @id @default(autoincrement())
+  cycleKey  String   // 隔週キー(例 "2026-MF-13")
+  correct   Boolean
+  solvedAt  DateTime @default(now())
+  familyId  String   @default("default-family")
+  childProfileId String?
+
+  @@unique([familyId, childProfileId, cycleKey])
   @@index([familyId])
   @@index([childProfileId])
 }

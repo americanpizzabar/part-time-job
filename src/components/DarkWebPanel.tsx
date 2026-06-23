@@ -99,7 +99,32 @@ interface QuizStatus {
   lastAnswered: { correct: boolean; createdAt: string } | null;
 }
 
-type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "closet" | "status";
+type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "ghost" | "core" | "junk" | "closet" | "status";
+
+interface GhostData {
+  weekKey: string;
+  ghost: { name: string; level: number; brainType: string; brainLabel: string; brainEmoji: string; targetScore: number; progress: number; defeated: boolean };
+  me: { level: number; score: number; budgetScore: number; quizScore: number };
+  rewardPart: { id: string; name: string; emoji: string; rarity: string; owned: boolean } | null;
+  canClaim: boolean;
+  isWeekend: boolean;
+}
+interface MainframeData {
+  cycleKey: string;
+  unlocked: boolean;
+  minLevel: number;
+  level: number;
+  solved: boolean;
+  problem: { question: string; options: string[]; explanation: string | null };
+  titlePart: { id: string; name: string; emoji: string; rarity: string; owned: boolean } | null;
+}
+interface JunkData {
+  rawData: number;
+  craftCost: number;
+  canCraft: boolean;
+  disassemblable: { id: string; name: string; emoji: string; rarity: string; raw: number }[];
+  craftPool: { id: string; name: string; emoji: string; rarity: string; owned: boolean; vocab: { word: string; meaning: string } | null }[];
+}
 
 interface DecodeMission {
   id: number; kind: "DATA" | "ALGO"; title: string; brief: string;
@@ -188,6 +213,16 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [guildMissions, setGuildMissions] = useState<{ type: MissionType; title: string; desc: string; reward: { exp: number; gcoins: number }; brainTag: BrainType; completed: boolean; claimed: boolean }[]>([]);
   const [guildMsg, setGuildMsg] = useState("");
   // SECRET DROP (23:00 ゲリラ)
+  const [ghost, setGhost] = useState<GhostData | null>(null);
+  const [ghostMsg, setGhostMsg] = useState("");
+  const [ghostWin, setGhostWin] = useState<{ name: string; emoji: string } | null>(null);
+  const [mainframe, setMainframe] = useState<MainframeData | null>(null);
+  const [mfSelected, setMfSelected] = useState<number | null>(null);
+  const [mfResult, setMfResult] = useState<{ correct: boolean; explanation: string; newPart: boolean } | null>(null);
+  const [mfHackOverlay, setMfHackOverlay] = useState(false);
+  const [junk, setJunk] = useState<JunkData | null>(null);
+  const [junkMsg, setJunkMsg] = useState("");
+  const [craftResult, setCraftResult] = useState<{ name: string; emoji: string; vocab: { word: string; meaning: string } | null } | null>(null);
   const [drop, setDrop] = useState<DropStatus | null>(null);
   const [dropOverlay, setDropOverlay] = useState(false);
   const [dropCountdown, setDropCountdown] = useState(60);
@@ -212,6 +247,9 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/drop").then(r => r.json()).then(setDrop).catch(() => {});
     fetch("/api/forecast").then(r => r.json()).then(setForecast).catch(() => {});
     fetch("/api/guild/daily").then(r => r.json()).then(d => setGuildMissions(d?.missions ?? [])).catch(() => {});
+    fetch("/api/ghost").then(r => r.json()).then(setGhost).catch(() => {});
+    fetch("/api/mainframe").then(r => r.json()).then(setMainframe).catch(() => {});
+    fetch("/api/junk").then(r => r.json()).then(setJunk).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -311,6 +349,74 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
       body: JSON.stringify({ partId: part.id, type: part.type }),
     });
     load(); onChanged();
+  }
+
+  async function claimGhost() {
+    const r = await fetch("/api/ghost", { method: "POST" });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      if (data.part) setGhostWin({ name: data.part.name, emoji: data.part.emoji });
+      load(); onChanged();
+      setTimeout(() => setGhostWin(null), 3500);
+    } else {
+      setGhostMsg(data.error ?? "略奪に失敗しました");
+      setTimeout(() => setGhostMsg(""), 3000);
+    }
+  }
+
+  async function solveMainframe() {
+    if (mfSelected === null) return;
+    const r = await fetch("/api/mainframe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selectedIndex: mfSelected }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      setMfResult({ correct: data.correct, explanation: data.explanation, newPart: data.newPart });
+      if (data.correct) {
+        setMfHackOverlay(true);
+        setTimeout(() => setMfHackOverlay(false), 2600);
+        load(); onChanged();
+      }
+    } else {
+      setMfResult({ correct: !!data.correct, explanation: data.error ?? "エラー", newPart: false });
+    }
+  }
+
+  async function disassemble(partId: string) {
+    const r = await fetch("/api/junk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "disassemble", partId }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      setJunkMsg(`+${data.gained} 生データを回収`);
+      fetch("/api/junk").then(r => r.json()).then(setJunk).catch(() => {});
+      onChanged();
+    } else {
+      setJunkMsg(data.error ?? "分解に失敗しました");
+    }
+    setTimeout(() => setJunkMsg(""), 2600);
+  }
+
+  async function craft() {
+    const r = await fetch("/api/junk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "craft" }),
+    });
+    const data = await r.json();
+    if (r.ok && data.part) {
+      setCraftResult({ name: data.part.name, emoji: data.part.emoji, vocab: data.part.vocab });
+      fetch("/api/junk").then(r => r.json()).then(setJunk).catch(() => {});
+      onChanged();
+      setTimeout(() => setCraftResult(null), 4000);
+    } else {
+      setJunkMsg(data.error ?? "合成に失敗しました");
+      setTimeout(() => setJunkMsg(""), 2600);
+    }
   }
 
   async function deposit() {
@@ -437,12 +543,15 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const TABS: [Tab, string][] = [
     ["matrix", "MATRIX"], ["decode", "DECODE"], ["oracle", "ORACLE"], ["market", "MARKET"], ["quiz", "QUIZ"],
     ["brain", "BRAIN"], ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"],
-    ["closet", "CLOSET"], ["status", "STATUS"],
+    ["ghost", "GHOST"], ["core", "CORE"], ["junk", "JUNK"], ["closet", "CLOSET"], ["status", "STATUS"],
   ];
 
   const decodePending = decode.filter(m => !m.solvedAt).length;
   const darkChargePending = !!(learning?.parentAlertAt && !learning.parentBoosted);
   const guildClaimable = guildMissions.filter(m => m.completed && !m.claimed).length;
+  const ghostClaimable = !!(ghost?.canClaim && !ghost.ghost.defeated);
+  const mainframeReady = !!(mainframe?.unlocked && !mainframe.solved);
+  const junkCraftable = !!junk?.canCraft;
 
   // ── ORACLE 計算: 総資産(リアルマネー=円) & 複利による未来予測 ──
   // 注: 銀行預金は G-COIN(ゲーム内通貨)なので円の総資産には合算しない
@@ -498,10 +607,11 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           <button onClick={onExit} className="text-cyan-300 border border-cyan-500/50 rounded-lg px-3 py-1 text-xs">EXIT ▸</button>
         </div>
 
-        {/* 10タブ (2行×5列) */}
+        {/* 15タブ (3行×5列) */}
         <div className="grid grid-cols-5 gap-1 mb-5">
           {TABS.map(([t, l]) => {
-            const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending) || (t === "guild" && guildClaimable > 0);
+            const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending) || (t === "guild" && guildClaimable > 0)
+              || (t === "ghost" && ghostClaimable) || (t === "core" && mainframeReady) || (t === "junk" && junkCraftable);
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`relative py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
@@ -1420,6 +1530,196 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           </div>
         )}
 
+        {/* ── GHOST(シャドウ・チェイサー) ─────────────────────────── */}
+        {tab === "ghost" && (
+          <div className="space-y-4">
+            <div className="border border-fuchsia-500/40 rounded-xl p-4 bg-black/40">
+              <div className="text-[11px] text-fuchsia-500 tracking-widest mb-3">// SHADOW_CHASER — 今週のAIライバル</div>
+              {!ghost ? <div className="text-fuchsia-600 text-xs font-mono">SCANNING…</div> : (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="text-3xl">{ghost.ghost.brainEmoji}</span>
+                    <div>
+                      <div className="text-fuchsia-200 font-bold font-mono">{ghost.ghost.name}</div>
+                      <div className="text-fuchsia-500 text-[10px] font-mono">Lv.{ghost.ghost.level} ・ {ghost.ghost.brainLabel}</div>
+                    </div>
+                    {ghost.ghost.defeated && <span className="ml-auto text-[10px] text-emerald-400 border border-emerald-500/50 rounded px-2 py-0.5 font-mono">DEFEATED</span>}
+                  </div>
+
+                  {/* 自分のスコア */}
+                  <div className="mb-3">
+                    <div className="flex justify-between text-[10px] font-mono mb-1">
+                      <span className="text-cyan-400">YOU — 知性・やりくりスコア</span>
+                      <span className="text-cyan-200">{ghost.me.score}</span>
+                    </div>
+                    <div className="h-2.5 bg-cyan-950 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-400 transition-all" style={{ width: `${Math.min(100, ghost.me.score)}%` }} />
+                    </div>
+                    <div className="text-[9px] text-cyan-700 font-mono mt-1">やりくり {ghost.me.budgetScore} / 知性 {ghost.me.quizScore}</div>
+                  </div>
+
+                  {/* ライバルの進捗(擬似リアルタイム) + 目標ライン */}
+                  <div className="mb-4">
+                    <div className="flex justify-between text-[10px] font-mono mb-1">
+                      <span className="text-fuchsia-400">RIVAL — 進捗メーター</span>
+                      <span className="text-fuchsia-200">{ghost.ghost.progress}%</span>
+                    </div>
+                    <div className="h-2.5 bg-fuchsia-950 rounded-full overflow-hidden relative">
+                      <div className="h-full bg-fuchsia-400 transition-all" style={{ width: `${ghost.ghost.progress}%` }} />
+                      <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-300" style={{ left: `${Math.min(100, ghost.ghost.targetScore)}%` }} />
+                    </div>
+                    <div className="text-[9px] text-yellow-500 font-mono mt-1">勝利ライン: スコア {ghost.ghost.targetScore} 突破</div>
+                  </div>
+
+                  {/* 略奪報酬プレビュー */}
+                  {ghost.rewardPart && (
+                    <div className="border border-fuchsia-700/40 rounded-lg p-3 bg-fuchsia-950/30 flex items-center gap-3 mb-3">
+                      <span className="text-2xl">{ghost.rewardPart.emoji}</span>
+                      <div className="flex-1">
+                        <div className="text-fuchsia-200 text-xs font-bold">{ghost.rewardPart.name}</div>
+                        <div className="text-fuchsia-600 text-[10px] font-mono">略奪報酬 ・ {ghost.rewardPart.rarity}{ghost.rewardPart.owned ? " ・ 入手済" : ""}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {ghost.ghost.defeated ? (
+                    <div className="text-emerald-400 text-xs font-mono text-center py-2">◈ 今週は勝利済み。来週、新たなライバルが現れる。</div>
+                  ) : ghost.canClaim ? (
+                    <button onClick={claimGhost}
+                      className="w-full py-3 rounded-lg bg-fuchsia-600 text-white text-sm font-bold font-mono hover:bg-fuchsia-500 transition-colors animate-pulse">
+                      ⚡ HACK ▶ ライバルのパーツを略奪する
+                    </button>
+                  ) : (
+                    <div className="text-fuchsia-600 text-xs font-mono text-center py-2">
+                      スコア {ghost.ghost.targetScore} を超えると略奪できる。今週も予算とクイズで差をつけろ。
+                    </div>
+                  )}
+                  {ghostMsg && <div className="text-red-400 text-xs font-mono text-center mt-2">{ghostMsg}</div>}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── CORE(メインフレーム・クラッキング) ──────────────────── */}
+        {tab === "core" && (
+          <div className="space-y-4">
+            <div className="border border-rose-500/40 rounded-xl p-4 bg-black/50">
+              <div className="text-[11px] text-rose-500 tracking-widest mb-3">// MAINFRAME — 仮想中央銀行データコア</div>
+              {!mainframe ? <div className="text-rose-600 text-xs font-mono">CONNECTING…</div> : !mainframe.unlocked ? (
+                <div className="text-rose-400/80 text-xs font-mono py-6 text-center leading-relaxed">
+                  🔒 最深部はロックされている。<br />Lv.{mainframe.minLevel} 以上で接続可能。（現在 Lv.{mainframe.level}）
+                </div>
+              ) : mainframe.solved ? (
+                <div className="space-y-3">
+                  <div className="text-emerald-400 text-sm font-mono font-bold text-center py-2">◈ SYSTEM DOWN — このサイクルは攻略済み</div>
+                  {mainframe.titlePart && (
+                    <div className="border border-rose-700/40 rounded-lg p-3 bg-rose-950/30 flex items-center gap-3">
+                      <span className="text-2xl">{mainframe.titlePart.emoji}</span>
+                      <div>
+                        <div className="text-rose-200 text-xs font-bold">{mainframe.titlePart.name}</div>
+                        <div className="text-rose-600 text-[10px] font-mono">ソロ限定・最高位称号 ・ {mainframe.titlePart.rarity}</div>
+                      </div>
+                    </div>
+                  )}
+                  {mainframe.problem.explanation && (
+                    <div className="text-gray-400 text-xs leading-relaxed border border-gray-800 rounded-lg p-3">{mainframe.problem.explanation}</div>
+                  )}
+                  <div className="text-rose-700 text-[10px] font-mono text-center">次の暗号は隔週でアップデートされる。</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-rose-300/90 text-[11px] font-mono">誰の力も借りず、自分の知識だけで防壁をこじ開けろ。1問完結・複合暗号。</div>
+                  <div className="text-white font-bold text-sm leading-relaxed">{mainframe.problem.question}</div>
+                  {!mfResult ? (
+                    <>
+                      <div className="space-y-2">
+                        {mainframe.problem.options.map((opt, i) => (
+                          <button key={i} onClick={() => setMfSelected(i)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg border text-xs font-mono transition-colors
+                              ${mfSelected === i ? "border-rose-400 bg-rose-900/40 text-rose-200" : "border-gray-700 bg-gray-900/60 text-gray-300 hover:border-gray-500"}`}>
+                            {String.fromCharCode(65 + i)}. {opt}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={solveMainframe} disabled={mfSelected === null}
+                        className="w-full py-3 rounded-lg bg-rose-600 text-white text-sm font-bold font-mono hover:bg-rose-500 transition-colors disabled:opacity-40">
+                        ⚡ CRACK ▶ 1タップで解読する
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className={`rounded-lg p-3 border text-center ${mfResult.correct ? "border-emerald-500/60 bg-emerald-900/30" : "border-red-500/60 bg-red-900/30"}`}>
+                        <div className={`font-bold font-mono ${mfResult.correct ? "text-emerald-300" : "text-red-300"}`}>
+                          {mfResult.correct ? "HACK SUCCESS" : "ACCESS DENIED"}
+                        </div>
+                      </div>
+                      <div className="text-gray-400 text-xs leading-relaxed border border-gray-800 rounded-lg p-3">{mfResult.explanation}</div>
+                      {!mfResult.correct && (
+                        <button onClick={() => { setMfResult(null); setMfSelected(null); }}
+                          className="w-full py-2.5 rounded-lg border border-gray-600 text-gray-300 text-xs font-mono">再挑戦する</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── JUNK(スクラップ・ジャンク屋) ────────────────────────── */}
+        {tab === "junk" && (
+          <div className="space-y-4">
+            <div className="border border-lime-500/40 rounded-xl p-4 bg-black/40">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[11px] text-lime-500 tracking-widest">// JUNK_SHOP — 闇のディーラーAI</div>
+                <div className="text-lime-300 text-xs font-mono">⛁ 生データ {junk?.rawData ?? 0}</div>
+              </div>
+              {!junk ? <div className="text-lime-600 text-xs font-mono">LOADING…</div> : (
+                <>
+                  {/* 合成(密造) */}
+                  <div className="border border-lime-700/40 rounded-lg p-3 bg-lime-950/20 mb-4">
+                    <div className="text-lime-300 text-xs font-bold mb-1">特級パーツを密造</div>
+                    <div className="text-lime-600 text-[10px] font-mono mb-2">生データ {junk.craftCost} を消費して、英単語データ入りの特級パーツを1つクラフト</div>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {junk.craftPool.map(c => (
+                        <span key={c.id} className={`text-[10px] font-mono px-2 py-0.5 rounded border ${c.owned ? "border-lime-600/40 text-lime-600" : "border-lime-400/60 text-lime-300"}`}>
+                          {c.emoji} {c.name}{c.owned ? " ✓" : ""}
+                        </span>
+                      ))}
+                    </div>
+                    <button onClick={craft} disabled={!junk.canCraft}
+                      className="w-full py-2.5 rounded-lg bg-lime-600 text-black text-sm font-bold font-mono hover:bg-lime-500 transition-colors disabled:opacity-40">
+                      🧪 CRAFT ▶ 密造する
+                    </button>
+                  </div>
+
+                  {/* 分解 */}
+                  <div className="text-lime-500 text-[10px] font-mono mb-2">// 余ったパーツを分解して生データに還元(装備中・基本は不可)</div>
+                  {junk.disassemblable.length === 0 ? (
+                    <div className="text-lime-700 text-xs font-mono text-center py-3">分解できるパーツがない。</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {junk.disassemblable.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 border border-lime-900/40 rounded-lg px-3 py-2">
+                          <span className="text-lg">{p.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-lime-200 text-xs truncate">{p.name}</div>
+                            <div className="text-lime-700 text-[9px] font-mono">{p.rarity} → +{p.raw} 生データ</div>
+                          </div>
+                          <button onClick={() => disassemble(p.id)}
+                            className="text-[10px] font-mono text-lime-300 border border-lime-600/50 rounded px-2 py-1 hover:bg-lime-900/40">分解</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {junkMsg && <div className="text-lime-300 text-xs font-mono text-center mt-3">{junkMsg}</div>}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── CLOSET ────────────────────────────────────────────── */}
         {tab === "closet" && (
           <div className="space-y-3">
@@ -1696,6 +1996,48 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                   ▸ SALVAGE ◂
                 </button>
                 <button onClick={() => setDropOverlay(false)} className="mt-3 text-red-700 text-[10px] font-mono">ルートを無視する</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── GHOST 略奪成功 ──────────────────────────────────────── */}
+      {ghostWin && (
+        <div className="fixed inset-0 z-[95] bg-black/85 flex items-center justify-center p-6">
+          <CodeRain color="#d946ef" opacity={0.2} />
+          <div className="relative z-10 w-full max-w-sm text-center reward-pop border border-fuchsia-500/60 rounded-2xl p-6 bg-black/70">
+            <div className="text-5xl mb-2">{ghostWin.emoji}</div>
+            <div className="text-fuchsia-300 font-black text-lg mb-1 neon-flicker">略奪成功 / HACK COMPLETE</div>
+            <div className="text-fuchsia-200 font-mono text-sm">{ghostWin.name} を奪い取った！</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CORE SYSTEM DOWN グリッチ演出 ─────────────────────────── */}
+      {mfHackOverlay && (
+        <div className="fixed inset-0 z-[96] bg-black flex items-center justify-center p-6">
+          <CodeRain color="#f43f5e" opacity={0.3} />
+          <div className="relative z-10 text-center">
+            <div className="text-rose-400 font-black text-3xl tracking-widest neon-flicker mb-2">SYSTEM DOWN</div>
+            <div className="text-emerald-300 font-black text-xl tracking-widest neon-flicker">HACK SUCCESS</div>
+            <div className="text-rose-500/70 font-mono text-[10px] mt-4">大人の経済システムを、自分の頭脳だけで圧倒した。</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── JUNK 密造成功 ──────────────────────────────────────── */}
+      {craftResult && (
+        <div className="fixed inset-0 z-[95] bg-black/85 flex items-center justify-center p-6">
+          <CodeRain color="#84cc16" opacity={0.2} />
+          <div className="relative z-10 w-full max-w-sm text-center reward-pop border border-lime-500/60 rounded-2xl p-6 bg-black/70">
+            <div className="text-5xl mb-2">{craftResult.emoji}</div>
+            <div className="text-lime-300 font-black text-lg mb-1 neon-flicker">密造成功 / CRAFTED</div>
+            <div className="text-lime-200 font-mono text-sm mb-2">{craftResult.name}</div>
+            {craftResult.vocab && (
+              <div className="inline-block border border-lime-600/50 rounded-lg px-3 py-1.5 mt-1">
+                <div className="text-lime-300 font-mono text-xs font-bold">📖 {craftResult.vocab.word}</div>
+                <div className="text-lime-500 font-mono text-[10px]">{craftResult.vocab.meaning}</div>
               </div>
             )}
           </div>

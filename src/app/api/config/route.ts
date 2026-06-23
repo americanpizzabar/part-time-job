@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   }
 
   if (aggregation) {
-    const { periodDays, startDayOfWeek, weeklyBudget } = aggregation;
+    const { periodDays, startDayOfWeek, weeklyBudget, quizBonusPerCorrect, quizBonusDailyCap, quizBonusHardBoost } = aggregation;
     const existing = await prisma.aggregationConfig.findFirst();
     const config = existing
       ? await prisma.aggregationConfig.update({
@@ -42,6 +42,11 @@ export async function POST(req: Request) {
             ...(weeklyBudget !== undefined && {
               weeklyBudget: weeklyBudget === null || weeklyBudget === "" ? null : Number(weeklyBudget),
             }),
+            ...(quizBonusPerCorrect !== undefined && { quizBonusPerCorrect: Number(quizBonusPerCorrect) || 0 }),
+            ...(quizBonusDailyCap !== undefined && {
+              quizBonusDailyCap: quizBonusDailyCap === null || quizBonusDailyCap === "" ? null : Number(quizBonusDailyCap),
+            }),
+            ...(quizBonusHardBoost !== undefined && { quizBonusHardBoost: Number(quizBonusHardBoost) || 0 }),
           },
         })
       : await prisma.aggregationConfig.create({
@@ -49,6 +54,9 @@ export async function POST(req: Request) {
             periodDays: Number(periodDays ?? 7),
             startDayOfWeek: Number(startDayOfWeek ?? 1),
             weeklyBudget: weeklyBudget ? Number(weeklyBudget) : null,
+            quizBonusPerCorrect: Number(quizBonusPerCorrect) || 0,
+            quizBonusDailyCap: quizBonusDailyCap ? Number(quizBonusDailyCap) : null,
+            quizBonusHardBoost: Number(quizBonusHardBoost) || 0,
           },
         });
     results.aggregation = config;

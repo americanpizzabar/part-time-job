@@ -163,6 +163,8 @@ export default function ParentPage() {
   const [backupInfo, setBackupInfo] = useState<{lastBackupAt:string|null;count:number;hasRestoreCode:boolean;autoSync:boolean;serverTime:string} | null>(null);
   const [restoreCode, setRestoreCode] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [quizBonus, setQuizBonus] = useState<{ pendingTotal: number; correctCount: number; hardPodCount: number; firstDate: string | null; lastDate: string | null } | null>(null);
+  const [bonusBusy, setBonusBusy] = useState(false);
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
@@ -200,10 +202,30 @@ export default function ParentPage() {
       fetch("/api/learning/history").then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : (d?.rows ?? []))).catch(() => {});
       fetch("/api/learning/accuracy").then(r => r.json()).then(d => setAccuracy(Array.isArray(d?.genres) ? d : null)).catch(() => {});
       fetch("/api/backup").then(r=>r.json()).then(setBackupInfo).catch(()=>{});
+      fetch("/api/quiz-bonus").then(r=>r.json()).then(setQuizBonus).catch(()=>{});
     } finally {
       setLoading(false);
     }
   }, [start, end]);
+
+  async function settleQuizBonus(action: "settle" | "handoff") {
+    setBonusBusy(true);
+    try {
+      const r = await fetch("/api/quiz-bonus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert(e.error ?? "精算に失敗しました");
+        return;
+      }
+      await fetchData();
+    } finally {
+      setBonusBusy(false);
+    }
+  }
 
   useEffect(() => {
     fetchData();
@@ -425,6 +447,42 @@ export default function ParentPage() {
         </div>
       ) : (
         <>
+          {/* デイリー報酬クイズ 週末精算レポート */}
+          {quizBonus && quizBonus.pendingTotal > 0 && (
+            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border border-amber-300 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏦</span>
+                <h2 className="font-bold text-gray-800">今週のお子様の頑張り</h2>
+              </div>
+              <div className="text-sm text-gray-700">
+                クイズ <span className="font-bold text-amber-700">{quizBonus.correctCount}問</span> 正解
+                {quizBonus.hardPodCount > 0 && (
+                  <span className="text-fuchsia-600">（うち高難度 {quizBonus.hardPodCount}問）</span>
+                )}
+                ・ 未精算ボーナス <span className="font-bold text-amber-700 text-base">{formatJPY(quizBonus.pendingTotal)}</span>
+              </div>
+              <p className="text-xs text-gray-500">
+                お小遣いに上乗せして渡すか、現金・電子マネーで手渡し済みにできます。
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => settleQuizBonus("settle")}
+                  disabled={bonusBusy}
+                  className="flex-1 bg-amber-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-700 disabled:opacity-50"
+                >
+                  お小遣いに上乗せ
+                </button>
+                <button
+                  onClick={() => settleQuizBonus("handoff")}
+                  disabled={bonusBusy}
+                  className="flex-1 bg-white border border-amber-300 text-amber-700 rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-50 disabled:opacity-50"
+                >
+                  手渡し済みにする
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 昼食の記録 */}
           <div>
             <h2 className="font-bold text-gray-800 mb-2">今月の昼食</h2>

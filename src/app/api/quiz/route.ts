@@ -182,6 +182,7 @@ export async function GET() {
       weatherType: quiz.weatherType,
       explanation: quiz.explanation,
       genre: quiz.genre,
+      layer: quiz.layer,
     },
     hasShield,
     shieldUntil,

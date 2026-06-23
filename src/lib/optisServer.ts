@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toDateStr, today } from "@/lib/dateUtils";
 import { subDays, startOfWeek, endOfWeek } from "date-fns";
+import { currentISOWeek } from "@/lib/optis";
 import {
   levelFromExp,
   evolutionStage,
@@ -107,6 +108,53 @@ export async function isRouletteBoostEligible(dateStr: string = today()): Promis
     if (spent > 0 && spent <= daily) return true;
   }
   return false;
+}
+
+// シャドウ・チェイサー用「知性・やりくりスコア」(0-100)を今週分で算出。
+// = 週予算の節約達成率(50%) + 今週のクイズ正答率×速度係数(50%)。
+export interface IntelScore {
+  score: number;        // 総合 0-100
+  budgetScore: number;  // やりくりスコア 0-100
+  quizScore: number;    // 知性スコア 0-100
+  weekKey: string;
+}
+export async function computeIntelScore(): Promise<IntelScore> {
+  const now = new Date();
+  const ws = toDateStr(startOfWeek(now, { weekStartsOn: 1 }));
+  const we = toDateStr(endOfWeek(now, { weekStartsOn: 1 }));
+
+  // --- やりくりスコア(週予算に対する余裕度) ---
+  const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
+  const budget = cfg?.weeklyBudget ?? 0;
+  let budgetScore = 50; // 予算未設定なら中立
+  if (budget > 0) {
+    const txs = await prisma.transaction.findMany({
+      where: { type: "EXPENSE", date: { gte: ws, lte: we } },
+    });
+    const spent = txs.reduce((s, t) => s + t.amount, 0);
+    const usage = spent / budget; // 1.0 で使い切り
+    // 使うほど低下、超過で大きく低下。0%使用=100点, 100%使用=50点, 150%超=0点付近。
+    budgetScore = Math.max(0, Math.min(100, Math.round(100 - usage * 50)));
+  }
+
+  // --- 知性スコア(今週のクイズ正答率×速度) ---
+  const startOfWeekDate = startOfWeek(now, { weekStartsOn: 1 });
+  const attempts = await prisma.quizAttempt.findMany({
+    where: { createdAt: { gte: startOfWeekDate } },
+    select: { correct: true, responseMs: true },
+  });
+  let quizScore = 0;
+  if (attempts.length > 0) {
+    const accuracy = attempts.filter(a => a.correct).length / attempts.length;
+    const speeds = attempts.map(a => a.responseMs ?? 20000);
+    const avgMs = speeds.reduce((s, v) => s + v, 0) / speeds.length;
+    // 速度係数: 8秒以内=1.0, 30秒以上=0.6 で線形
+    const speedFactor = Math.max(0.6, Math.min(1, 1 - (avgMs - 8000) / 55000));
+    quizScore = Math.round(accuracy * 100 * speedFactor);
+  }
+
+  const score = Math.round(budgetScore * 0.5 + quizScore * 0.5);
+  return { score, budgetScore, quizScore, weekKey: currentISOWeek(now) };
 }
 
 // 後出し不正検知: NMD申告日に放課後ウィンドウの支出が後から追加されていないか

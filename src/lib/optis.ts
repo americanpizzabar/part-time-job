@@ -261,6 +261,10 @@ export interface Part {
   seasonal?: boolean; // 季節/期間限定
   trader?: boolean; // 商人属性(メルカリ売上)で解放される限定パーツ
   bug?: boolean; // バグパーツ(裏モードのデータ解読でのみ解放)
+  ghost?: boolean; // シャドウ・チェイサー(AIライバル)から略奪する限定パーツ
+  solo?: boolean; // メインフレーム単独攻略でのみ得る最高位ソロ称号
+  craft?: boolean; // ジャンク屋で生データから密造する特級パーツ
+  vocab?: { word: string; meaning: string }; // クラフトパーツに埋め込まれた英単語データ
   effect?: PartEffect;
 }
 
@@ -302,6 +306,23 @@ export const PARTS: Part[] = [
     effect: { expBonus: 0.05 } },                               // 全EXP +5%
   { id: "acc_terminal", type: "accessory", name: "ターミナル・ゴーグル", rarity: "RARE", color: "#10b981", emoji: "👓", bug: true,
     effect: { forecastDiscount: 0.20 } },                       // 予報コスト -20%
+  // ── GHOST(シャドウ・チェイサー: AIライバルから略奪する限定カスタムパーツ) ──────
+  { id: "aura_phantom", type: "aura", name: "ファントム・オーラ", rarity: "LEGENDARY", color: "#7c3aed", emoji: "👻", ghost: true,
+    effect: { expBonus: 0.07 } },                               // 全EXP +7%
+  { id: "acc_ghost_mask", type: "accessory", name: "ゴースト・マスク", rarity: "RARE", color: "#a78bfa", emoji: "🎭", ghost: true,
+    effect: { sellFeeReduction: 0.04 } },                       // 売却手数料 -4%
+  { id: "aura_neon_skull", type: "accessory", name: "ネオン・スカル", rarity: "LEGENDARY", color: "#22d3ee", emoji: "💀", ghost: true,
+    effect: { wisdomBonus: 2 } },                               // 知性タップ +2pt
+  // ── SOLO(メインフレーム単独攻略でのみ得る最高位ソロ称号) ──────────────────────
+  { id: "acc_mainframe", type: "accessory", name: "メインフレーム・クラッカー", rarity: "LEGENDARY", color: "#f43f5e", emoji: "🛡️", solo: true,
+    effect: { expBonus: 0.12, wisdomBonus: 3 } },               // 全EXP +12%, 知性タップ +3pt
+  // ── CRAFT(ジャンク屋で生データから密造する特級パーツ。英単語データ埋め込み) ──────
+  { id: "craft_lexicon", type: "aura", name: "レキシコン・オーラ", rarity: "LEGENDARY", color: "#10b981", emoji: "📖", craft: true,
+    effect: { expBonus: 0.06, wisdomBonus: 1 }, vocab: { word: "Lexicon", meaning: "語彙・用語集" } },
+  { id: "craft_cipher", type: "accessory", name: "サイファー・コア", rarity: "LEGENDARY", color: "#6366f1", emoji: "🔐", craft: true,
+    effect: { forecastDiscount: 0.20, wisdomBonus: 2 }, vocab: { word: "Cipher", meaning: "暗号" } },
+  { id: "craft_quantum", type: "aura", name: "クァンタム・オーラ", rarity: "LEGENDARY", color: "#ec4899", emoji: "⚛️", craft: true,
+    effect: { expBonus: 0.09 }, vocab: { word: "Quantum", meaning: "量子・最小単位" } },
 ];
 
 // 商人(トレーダー)パーツのID一覧 — メルカリ売上で解放
@@ -569,3 +590,152 @@ export const FORECAST_WISDOM_COST = 15;
 export const QUIZ_SHIELD_DAYS = 7;
 export const QUIZ_CORRECT_EXP = 50;
 export const EN_MODE_EXP_MULTIPLIER = 1.5;
+
+// ─── デイリー報酬クイズ(データポッド) ────────────────────────────────────
+// 黒ポッド(高難度プレミアム演出)になる出題レイヤーの下限。
+export const BLACK_POD_MIN_LAYER = 2;
+
+// 親設定からこのポッドで獲得するボーナス額を算出。
+// base = 1問あたり単価。hardPod 時は base + hardBoost(2倍演出)。最後に dailyCap でクランプ。
+export function computePodBonus(
+  perCorrect: number,
+  hardBoost: number,
+  dailyCap: number | null | undefined,
+  hardPod: boolean,
+): number {
+  if (!perCorrect || perCorrect <= 0) return 0;
+  let amount = hardPod ? perCorrect + Math.max(0, hardBoost) : perCorrect;
+  if (dailyCap != null && dailyCap > 0) amount = Math.min(amount, dailyCap);
+  return Math.round(amount);
+}
+
+// ─── シャドウ・チェイサー(週替わりAIライバル) ─────────────────────────────
+export const GHOST_PART_IDS = PARTS.filter(p => p.ghost).map(p => p.id);
+
+const GHOST_NAME_PREFIX = ["Ghost", "Neo", "Zero", "Cipher", "Echo", "Raven", "Vortex", "Nyx"];
+const GHOST_NAME_SUFFIX = ["X", "_7", "_Σ", "Byte", "Hax", "_v2", "Null", "Prime"];
+const GHOST_GRADES = ["中学生クラス", "高校生クラス", "大学生クラス", "エリートクラス"];
+
+// weekKey と現レベルから決定論的にライバルを生成(同週なら必ず同じ)。
+export function generateGhost(weekKey: string, level: number): {
+  name: string; level: number; brainType: BrainType; targetScore: number; rewardPartId: string; grade: string;
+} {
+  const pre = GHOST_NAME_PREFIX[seededInt(weekKey + ":pre", GHOST_NAME_PREFIX.length)];
+  const suf = GHOST_NAME_SUFFIX[seededInt(weekKey + ":suf", GHOST_NAME_SUFFIX.length)];
+  const brains: BrainType[] = ["IMPULSIVE", "ANALYTICAL", "FRUGAL", "BALANCED"];
+  const brainType = brains[seededInt(weekKey + ":brain", brains.length)];
+  // ライバルレベルは自分の現レベル ±1 近傍
+  const ghostLevel = Math.max(1, level + (seededInt(weekKey + ":lvl", 3) - 1));
+  // 目標スコアは 55〜80 の範囲(週末に超えるべきハードル)
+  const targetScore = 55 + seededInt(weekKey + ":target", 26);
+  const rewardPartId = GHOST_PART_IDS[seededInt(weekKey + ":reward", Math.max(1, GHOST_PART_IDS.length))];
+  const gradeIdx = Math.min(GHOST_GRADES.length - 1, Math.floor(ghostLevel / 4));
+  return { name: `${pre}${suf}`, level: ghostLevel, brainType, targetScore, rewardPartId, grade: GHOST_GRADES[gradeIdx] };
+}
+
+// ライバルの擬似リアルタイム進捗(週内の経過割合 0..100)。週末に向け加速する見せ方。
+export function ghostProgress(weekKey: string, now: Date = new Date()): number {
+  // 週内の経過(月曜起点)を 0..1 に
+  const day = (now.getDay() + 6) % 7; // Mon=0 .. Sun=6
+  const frac = (day + now.getHours() / 24) / 7;
+  // weekKey 由来のわずかな揺らぎ(±8)を加えてライバルごとに個性を出す
+  const jitter = (seededInt(weekKey + ":prog", 17) - 8);
+  return Math.max(0, Math.min(100, Math.round(frac * 100 + jitter * frac)));
+}
+
+// ─── メインフレーム・クラッキング(隔週ソロ複合暗号) ─────────────────────────
+// 隔週サイクルキー(2週ごとに更新)。
+export function mainframeCycleKey(d: Date = new Date()): string {
+  const week = currentISOWeek(d); // "YYYY-Www"
+  const wnum = parseInt(week.slice(week.indexOf("W") + 1), 10) || 0;
+  const cycle = Math.floor(wnum / 2);
+  return `${d.getFullYear()}-MF-${String(cycle).padStart(2, "0")}`;
+}
+
+export interface MainframeProblem {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+// 時事×経済×英語が複合した超難解 1問完結型パズル。cycleKey で決定論的に選出。
+export const MAINFRAME_BANK: MainframeProblem[] = [
+  {
+    question: "中央銀行が政策金利を引き上げると、一般に『国債価格』『自国通貨』はどう動くと教科書的に説明されるか。英語の 'tighten' のニュアンスも踏まえて選べ。",
+    options: [
+      "国債価格は下落し、自国通貨は上昇しやすい (tighten=引き締め)",
+      "国債価格は上昇し、自国通貨は下落しやすい",
+      "どちらも変化しない (金利は無関係)",
+    ],
+    correctIndex: 0,
+    explanation: "利上げ(tighten)で既発国債の相対的魅力が下がり価格は下落、利回り上昇で資金流入し通貨は上昇しやすい。",
+  },
+  {
+    question: "『実質金利 = 名目金利 − 期待インフレ率』。名目金利3%、期待インフレ率5%のとき、実質金利と『預金者の購買力』の関係として正しいのは？ (real interest rate)",
+    options: [
+      "実質金利は −2%。預金の購買力は目減りする",
+      "実質金利は +8%。購買力は大きく増える",
+      "実質金利は +2%。購買力は守られる",
+    ],
+    correctIndex: 0,
+    explanation: "3−5=−2%。インフレが金利を上回ると、預けていてもお金の実質的価値(購買力)は減る。",
+  },
+  {
+    question: "GDP の三面等価で『生産=分配=支出』が成り立つ。英語 'expenditure approach' の支出面に含まれないものは？",
+    options: [
+      "中古車の個人間転売額そのもの",
+      "政府支出",
+      "純輸出 (輸出−輸入)",
+    ],
+    correctIndex: 0,
+    explanation: "中古品の転売は新たな付加価値を生まないためGDPに計上しない(仲介手数料のみ計上)。政府支出・純輸出は支出面の構成要素。",
+  },
+  {
+    question: "為替で『1ドル=100円』から『1ドル=150円』へ。これは円高・円安どちらで、輸入企業の英語表現として適切なのは？",
+    options: [
+      "円安。輸入コストが上がる (depreciation of the yen)",
+      "円高。輸入コストが下がる (appreciation of the yen)",
+      "円高。輸出が不利になる",
+    ],
+    correctIndex: 0,
+    explanation: "同じ1ドルに多くの円が必要=円の価値低下=円安(depreciation)。輸入品は割高になる。",
+  },
+  {
+    question: "複利の『72の法則』。年利6%で運用するとき、元本が約2倍になるおおよその年数は？ (compound interest)",
+    options: ["約12年", "約6年", "約24年"],
+    correctIndex: 0,
+    explanation: "72÷6=12。72の法則は『72÷年利(%)≒2倍になる年数』の近似。複利の威力を直感的に掴める。",
+  },
+];
+
+export function pickMainframeProblem(cycleKey: string): MainframeProblem {
+  return MAINFRAME_BANK[seededInt(cycleKey, MAINFRAME_BANK.length)];
+}
+
+export const MAINFRAME_TITLE_PART = "acc_mainframe";
+export const MAINFRAME_EXP_REWARD = 300;
+export const MAINFRAME_WISDOM_REWARD = 20;
+
+// ─── ジャンク屋(パーツ分解 & 合成) ────────────────────────────────────────
+export const CRAFT_PART_IDS = PARTS.filter(p => p.craft).map(p => p.id);
+
+// 分解で得られる生データ量(レアリティ別)。
+export const RAW_DATA_BY_RARITY: Record<Rarity, number> = {
+  COMMON: 5,
+  UNCOMMON: 12,
+  RARE: 30,
+  LEGENDARY: 70,
+};
+
+// クラフト1回に必要な生データ量。
+export const CRAFT_COST = 100;
+
+// 分解できないパーツ(基本パーツ・装備中は別途サーバーで弾く)。
+export const UNDISASSEMBLABLE = new Set(["body_core", "aura_basic"]);
+
+export function rawDataForPart(id: string): number {
+  const p = getPart(id);
+  if (!p) return 0;
+  return RAW_DATA_BY_RARITY[p.rarity] ?? 0;
+}

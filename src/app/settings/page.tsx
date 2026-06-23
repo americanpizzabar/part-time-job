@@ -6,7 +6,10 @@ import { useRole } from "@/lib/useRole";
 
 interface Config {
   allowance: { id: number; period: string; amount: number; startDate: string } | null;
-  aggregation: { id: number; periodDays: number; startDayOfWeek: number; weeklyBudget: number | null } | null;
+  aggregation: {
+    id: number; periodDays: number; startDayOfWeek: number; weeklyBudget: number | null;
+    quizBonusPerCorrect?: number; quizBonusDailyCap?: number | null; quizBonusHardBoost?: number;
+  } | null;
 }
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -23,6 +26,9 @@ export default function SettingsPage() {
   const [periodDays, setPeriodDays] = useState("7");
   const [startDayOfWeek, setStartDayOfWeek] = useState("1");
   const [weeklyBudget, setWeeklyBudget] = useState("");
+  const [quizBonusPerCorrect, setQuizBonusPerCorrect] = useState("0");
+  const [quizBonusDailyCap, setQuizBonusDailyCap] = useState("");
+  const [quizBonusHardBoost, setQuizBonusHardBoost] = useState("0");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const { role, setRole, mounted } = useRole();
@@ -41,6 +47,9 @@ export default function SettingsPage() {
           setPeriodDays(String(data.aggregation.periodDays));
           setStartDayOfWeek(String(data.aggregation.startDayOfWeek));
           setWeeklyBudget(data.aggregation.weeklyBudget != null ? String(data.aggregation.weeklyBudget) : "");
+          setQuizBonusPerCorrect(String(data.aggregation.quizBonusPerCorrect ?? 0));
+          setQuizBonusDailyCap(data.aggregation.quizBonusDailyCap != null ? String(data.aggregation.quizBonusDailyCap) : "");
+          setQuizBonusHardBoost(String(data.aggregation.quizBonusHardBoost ?? 0));
         }
       });
   }, []);
@@ -59,6 +68,9 @@ export default function SettingsPage() {
             periodDays: Number(periodDays),
             startDayOfWeek: Number(startDayOfWeek),
             weeklyBudget: weeklyBudget === "" ? null : Number(weeklyBudget),
+            quizBonusPerCorrect: Number(quizBonusPerCorrect) || 0,
+            quizBonusDailyCap: quizBonusDailyCap === "" ? null : Number(quizBonusDailyCap),
+            quizBonusHardBoost: Number(quizBonusHardBoost) || 0,
           },
         }),
       });
@@ -178,6 +190,65 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-500 mt-1">月〜土の支出がこの額以下なら、日曜にマイルストーン・チェスト（レアパーツ確定）が出現します</p>
         </div>
       </div>
+
+      {mounted && role === "PARENT" && (
+        <div className="bg-white rounded-xl border border-amber-200 p-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-gray-800">📦 日給・インテリジェンス投資</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              毎日1回出題されるクイズに正解すると、子供にボーナスが貯まります。お金は都度引き落とされず「プール」に貯まり、週末に親画面でまとめて精算します。
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">1問正解あたりのボーナス（円）</label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setQuizBonusPerCorrect(String(Math.max(0, (Number(quizBonusPerCorrect) || 0) - 10)))}
+                className="w-10 h-10 rounded-lg border border-gray-300 text-gray-600 text-lg font-bold"
+              >−</button>
+              <input
+                type="number"
+                value={quizBonusPerCorrect}
+                onChange={e => setQuizBonusPerCorrect(e.target.value)}
+                step="10"
+                min="0"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <button
+                onClick={() => setQuizBonusPerCorrect(String((Number(quizBonusPerCorrect) || 0) + 10))}
+                className="w-10 h-10 rounded-lg border border-gray-300 text-gray-600 text-lg font-bold"
+              >＋</button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">0円にすると報酬クイズ機能はOFFになります（通常の経済ウェザークイズが表示されます）。</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">1日あたりの上限（円・任意）</label>
+            <input
+              type="number"
+              value={quizBonusDailyCap}
+              onChange={e => setQuizBonusDailyCap(e.target.value)}
+              min="0"
+              placeholder="例: 100（未設定なら上限なし）"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">高難度ボーナス上乗せ上限（円）</label>
+            <input
+              type="number"
+              value={quizBonusHardBoost}
+              onChange={e => setQuizBonusHardBoost(e.target.value)}
+              step="10"
+              min="0"
+              placeholder="例: 30"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              子供の正解率が上がり大学・大人レベルの「⚠️ブラックポッド」が出たとき、この額まで自動で上乗せします（1日上限の範囲内）。0なら上乗せなし。
+            </p>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleSave}
