@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { GENRE_META, QuizGenre, BLACK_POD_MIN_LAYER } from "@/lib/optis";
+import { GENRE_META, QuizGenre, BLACK_POD_MIN_LAYER, computePodBonus } from "@/lib/optis";
 
 interface QuizData {
   id: number;
@@ -22,6 +22,7 @@ export default function DataPod({ onAnswered }: DataPodProps) {
   const [lastCorrect, setLastCorrect] = useState<boolean | null>(null);
   const [perCorrect, setPerCorrect] = useState(0);
   const [hardBoost, setHardBoost] = useState(0);
+  const [dailyCap, setDailyCap] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [result, setResult] = useState<{ correct: boolean; explanation: string; expGained: number; bonusEarned: number; isHardPod: boolean } | null>(null);
@@ -38,6 +39,7 @@ export default function DataPod({ onAnswered }: DataPodProps) {
       setLastCorrect(q.lastAnswered ? q.lastAnswered.correct : null);
       setPerCorrect(cfg.aggregation?.quizBonusPerCorrect ?? 0);
       setHardBoost(cfg.aggregation?.quizBonusHardBoost ?? 0);
+      setDailyCap(cfg.aggregation?.quizBonusDailyCap ?? null);
     });
   }, []);
 
@@ -67,7 +69,7 @@ export default function DataPod({ onAnswered }: DataPodProps) {
   if (!quiz) return null;
 
   const isHardPod = quiz.layer >= BLACK_POD_MIN_LAYER && hardBoost > 0;
-  const podBonus = isHardPod ? perCorrect + hardBoost : perCorrect;
+  const podBonus = computePodBonus(perCorrect, hardBoost, dailyCap, isHardPod);
   const genreMeta = GENRE_META[quiz.genre as QuizGenre] ?? GENRE_META.CURRENT;
 
   async function submitAnswer(idx: number) {
