@@ -143,10 +143,7 @@ export default function TasksPage() {
     }
   }, [fetchData, seeded, configLoaded]);
 
-  const totalCompleted = days.reduce(
-    (s, d) => s + d.chores.filter(c => c.completed).reduce((ss, c) => ss + c.amount, 0),
-    0
-  );
+  const totalCompleted = days.reduce((s, d) => s + d.totalAmount, 0);
 
   const isMultiDay = rangeIndex > 0;
 
