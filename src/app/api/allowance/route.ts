@@ -15,22 +15,23 @@ export async function GET() {
   const refreshed = await Promise.all(
     periods.map(async (p) => {
       if (p.isPaid) return p;
-      const { baseAmount, choreAmount, totalAmount, choreDetails } = await calculateAllowance(
+      const { baseAmount, choreAmount, choreDetails } = await calculateAllowance(
         p.startDate,
         p.endDate
       );
       const snapshot = JSON.stringify(choreDetails);
+      const effectiveTotal = baseAmount + choreAmount + (p.bonusAmount ?? 0);
       if (
         p.baseAmount === baseAmount &&
         p.choreAmount === choreAmount &&
-        p.totalAmount === totalAmount &&
+        p.totalAmount === effectiveTotal &&
         p.snapshot === snapshot
       ) {
         return p;
       }
       return prisma.allowancePeriod.update({
         where: { id: p.id },
-        data: { baseAmount, choreAmount, totalAmount, snapshot },
+        data: { baseAmount, choreAmount, totalAmount: effectiveTotal, snapshot },
       });
     })
   );

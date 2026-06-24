@@ -278,7 +278,7 @@ export default function AllowancePage() {
                         再集計
                       </button>
                     )}
-                    {isParent && (
+                    {mounted && (
                       <button
                         onClick={() => handleDelete(period)}
                         className="px-4 py-2.5 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
