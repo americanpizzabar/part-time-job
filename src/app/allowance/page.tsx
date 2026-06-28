@@ -64,6 +64,12 @@ export default function AllowancePage() {
   const [bonusMemoInput, setBonusMemoInput] = useState("");
   const [savingBonus, setSavingBonus] = useState(false);
 
+  // 診断: 稼働中ビルドのコミットSHA(本番の反映確認用)
+  const [buildInfo, setBuildInfo] = useState<{ commit: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/version").then(r => r.json()).then(d => setBuildInfo({ commit: d.commit })).catch(() => {});
+  }, []);
+
   const fetchData = () => {
     fetch("/api/allowance").then(r => r.json()).then(setPeriods);
     fetch("/api/config").then(r => r.json()).then(setConfig);
@@ -296,6 +302,11 @@ export default function AllowancePage() {
           <div className="text-center text-gray-400 py-12">まだ集計がありません</div>
         )}
       </div>
+
+      {/* 診断: 稼働ビルド表示(本番反映の確認用・後で削除) */}
+      {buildInfo && (
+        <div className="text-center text-[10px] text-gray-300 pt-2">build: {buildInfo.commit}</div>
+      )}
 
       {/* 集計作成モーダル */}
       {showCreate && (
