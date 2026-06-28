@@ -118,7 +118,6 @@ export default function OptisLabPage() {
   const [syncGenres, setSyncGenres] = useState<{ label: string; accuracy: number }[]>([]);
   const [encounterQuiz, setEncounterQuiz] = useState<{ id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null>(null);
   const [quizBonusOn, setQuizBonusOn] = useState(false);
-  const [bonusPool, setBonusPool] = useState(0);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
   const { role, mounted: roleMounted } = useRole();
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,12 +152,9 @@ export default function OptisLabPage() {
       fetch(`/api/transactions?startDate=${start}&endDate=${end}`).then(r => r.json()).catch(() => []),
       fetch("/api/learning/accuracy").then(r => r.json()).catch(() => null),
     ]);
-    // デイリー報酬クイズ設定 + ボーナスプール残高(失敗しても他に影響させない)
+    // デイリー報酬クイズ設定(失敗しても他に影響させない)
     fetch("/api/config").then(r => r.json()).then(cfg => {
       setQuizBonusOn((cfg.aggregation?.quizBonusPerCorrect ?? 0) > 0);
-    }).catch(() => {});
-    fetch("/api/quiz-bonus").then(r => r.json()).then(qb => {
-      setBonusPool(qb.pendingTotal ?? 0);
     }).catch(() => {});
     setOptis(o);
     setBalance(b);
@@ -649,14 +645,6 @@ export default function OptisLabPage() {
 
       {/* デイリー報酬クイズ(データポッド) or 時事クイズ・経済ウェザーバナー */}
       {quizBonusOn ? <DataPod onAnswered={fetchAll} /> : <QuizBanner onAnswered={fetchAll} />}
-
-      {/* ボーナスプール残高(子供にも控えめに見せる) */}
-      {quizBonusOn && bonusPool > 0 && (
-        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          <span className="text-base">🏦</span>
-          <span>ボーナスプール: <span className="font-bold">{formatJPY(bonusPool)}</span> ためてるよ（週末におうちのひとが せいさん）</span>
-        </div>
-      )}
 
       {/* ミッション受信箱 */}
       <MissionInbox onChanged={fetchAll} />

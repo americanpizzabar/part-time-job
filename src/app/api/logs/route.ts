@@ -22,6 +22,15 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
   });
 
+  // デイリー報酬クイズのボーナス: その日のお手伝いに上乗せして表示・集計する
+  const quizBonuses = await prisma.quizBonusEarning.findMany({
+    where: { earnedDate: { gte: startDate, lte: endDate } },
+  });
+  const bonusByDate = new Map<string, number>();
+  for (const b of quizBonuses) {
+    bonusByDate.set(b.earnedDate, (bonusByDate.get(b.earnedDate) ?? 0) + b.amount);
+  }
+
   const dates = getDateRange(startDate,
     Math.min(
       Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1,
@@ -57,11 +66,12 @@ export async function GET(req: Request) {
         };
       });
 
-    const totalAmount = dayChores
+    const choreSum = dayChores
       .filter(c => c.completed)
       .reduce((sum, c) => sum + (c.amountOverride ?? c.amount), 0);
+    const quizBonus = bonusByDate.get(date) ?? 0;
 
-    return { date, chores: dayChores, totalAmount };
+    return { date, chores: dayChores, totalAmount: choreSum + quizBonus, quizBonus };
   });
 
   return NextResponse.json(result);

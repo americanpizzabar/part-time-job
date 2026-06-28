@@ -56,7 +56,7 @@ export default function DataPod({ onAnswered }: DataPodProps) {
         <span className="text-2xl">{lastCorrect ? "💰" : "🔒"}</span>
         <div className="flex-1 min-w-0">
           <div className={`font-bold text-sm ${lastCorrect ? "text-amber-300" : "text-red-300"}`}>
-            {lastCorrect ? "今日のハック成功！報酬をプールに確保" : "ハック失敗。データはロックされた"}
+            {lastCorrect ? "今日のハック成功！今日のお手伝いに追加された" : "ハック失敗。データはロックされた"}
           </div>
           <div className={`text-xs mt-0.5 ${lastCorrect ? "text-amber-400/70" : "text-red-400/70"}`}>
             また明日、新しいデータポッドが出現する
@@ -181,7 +181,7 @@ export default function DataPod({ onAnswered }: DataPodProps) {
                           ＋¥{result.bonusEarned}
                         </div>
                       ) : null}
-                      <div className="text-amber-200/80 text-xs">ボーナスプールにチャージされた（週末に親が精算）</div>
+                      <div className="text-amber-200/80 text-xs">今日のお手伝いに追加された！お小遣いと一緒にもらえる</div>
                       {result.expGained > 0 && (
                         <div className="text-yellow-200 text-xs mt-1">経験値 +{result.expGained} EXP も獲得！</div>
                       )}

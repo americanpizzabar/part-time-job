@@ -24,6 +24,7 @@ interface DayData {
   date: string;
   chores: ChoreItem[];
   totalAmount: number;
+  quizBonus?: number;
 }
 
 interface BalanceSummary {

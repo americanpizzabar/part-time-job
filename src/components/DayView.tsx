@@ -22,6 +22,7 @@ interface DayData {
   date: string;
   chores: ChoreItem[];
   totalAmount: number;
+  quizBonus?: number;
 }
 
 interface DayViewProps {
@@ -43,7 +44,8 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
 
   const completedCount = day.chores.filter(c => c.completed).length;
   const totalCount = day.chores.length;
-  const completedAmount = day.chores.filter(c => c.completed).reduce((s, c) => s + (c.amountOverride ?? c.amount), 0);
+  const quizBonus = day.quizBonus ?? 0;
+  const completedAmount = day.chores.filter(c => c.completed).reduce((s, c) => s + (c.amountOverride ?? c.amount), 0) + quizBonus;
 
   async function handleToggle(chore: ChoreItem) {
     if (chore.logId === null) {
@@ -129,12 +131,15 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
                 ))}
               </div>
               <span className="text-sm text-gray-500">{completedCount}/{totalCount}</span>
-              <span className={`text-sm font-semibold ${completedAmount > 0 ? "text-green-600" : "text-gray-400"}`}>
-                {formatJPY(completedAmount)}
-              </span>
             </>
           )}
-          {totalCount === 0 && <span className="text-sm text-gray-400">お手伝いなし</span>}
+          {(totalCount > 0 || quizBonus > 0) ? (
+            <span className={`text-sm font-semibold ${completedAmount > 0 ? "text-green-600" : "text-gray-400"}`}>
+              {formatJPY(completedAmount)}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400">お手伝いなし</span>
+          )}
           <svg
             className={`w-4 h-4 text-gray-400 transition-transform ${collapsed ? "" : "rotate-180"}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor"
@@ -157,6 +162,15 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
               onEditAmount={isParent && chore.logId !== null ? handleEditAmount : undefined}
             />
           ))}
+          {quizBonus > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🧠</span>
+                <span className="text-sm font-medium text-amber-800">クイズ正解ボーナス</span>
+              </div>
+              <span className="text-sm font-bold text-amber-700">＋{formatJPY(quizBonus)}</span>
+            </div>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="w-full flex items-center justify-center gap-2 p-2.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-all text-sm"

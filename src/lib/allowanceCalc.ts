@@ -99,6 +99,22 @@ export async function calculateAllowance(
     }
   }
 
+  // デイリー報酬クイズのボーナスは「その日のお手伝い」として集計に組み込む。
+  // (週末に別途精算するのではなく、日々のお手伝い実績と一緒に貯まる)
+  const quizBonuses = await prisma.quizBonusEarning.findMany({
+    where: { earnedDate: { gte: startDate, lte: endDate } },
+  });
+  const quizBonusTotal = quizBonuses.reduce((s, b) => s + b.amount, 0);
+  if (quizBonusTotal > 0) {
+    choreAmount += quizBonusTotal;
+    choreDetails["quizbonus"] = {
+      name: "🧠 クイズ正解ボーナス",
+      amount: quizBonusTotal,
+      scheduled: quizBonuses.length,
+      completed: quizBonuses.length,
+    };
+  }
+
   const baseAmount = allowanceConfig?.amount ?? 0;
   const totalAmount = baseAmount + choreAmount;
 
