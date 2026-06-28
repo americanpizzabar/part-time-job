@@ -6,7 +6,6 @@ import { CATEGORY_ICONS, needsWantsFeedback } from "@/lib/budget";
 import NeedsWantsPie from "@/components/NeedsWantsPie";
 import AddTransactionModal from "@/components/AddTransactionModal";
 import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
-import GiftMoneySection from "@/components/GiftMoneySection";
 
 interface Transaction {
   id: number;
@@ -241,9 +240,6 @@ export default function BudgetPage() {
           </button>
         </div>
       )}
-
-      {/* お年玉・お祝い金(別管理) */}
-      <GiftMoneySection onChange={fetchData} />
 
       {/* 月ナビ */}
       <div className="flex items-center justify-between">

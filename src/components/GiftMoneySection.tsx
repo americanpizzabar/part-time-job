@@ -15,12 +15,12 @@ interface GiftEntry {
 
 // お年玉・お祝い金: 別管理の特別残高。
 // 親が入金/引き出しを記録し、子は残高と履歴を閲覧する(引き出しは親へ口頭依頼)。
-export default function GiftMoneySection({ onChange }: { onChange?: () => void }) {
+export default function GiftMoneySection({ onChange, defaultOpen = false }: { onChange?: () => void; defaultOpen?: boolean }) {
   const { role, mounted } = useRole();
   const isParent = mounted && role === "PARENT";
   const [balance, setBalance] = useState(0);
   const [entries, setEntries] = useState<GiftEntry[]>([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [showForm, setShowForm] = useState(false);
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");

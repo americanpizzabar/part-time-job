@@ -9,6 +9,7 @@ const items = [
   { href: "/collection", label: "パーツ図鑑", icon: "📒", desc: "Optisのパーツ収集と装備" },
   { href: "/chores", label: "お手伝い設定", icon: "📋", desc: "お手伝いの種類とスケジュール" },
   { href: "/allowance", label: "おこづかい集計", icon: "💰", desc: "期間ごとの集計・支払い管理" },
+  { href: "/gift", label: "お年玉・お祝い金", icon: "🧧", desc: "もらった特別なお金を別管理" },
   { href: "/stats", label: "統計", icon: "📊", desc: "お手伝いの達成率・推移" },
   { href: "/chronicle", label: "メモリー・タイムカプセル", icon: "🏛️", desc: "進化の系譜・知の保存庫(復習)" },
   { href: "/portfolio", label: "未来へのポートフォリオ", icon: "📤", desc: "自己投資・実績データをPDF/CSV出力" },
