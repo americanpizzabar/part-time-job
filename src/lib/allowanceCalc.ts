@@ -107,11 +107,14 @@ export async function calculateAllowance(
   const quizBonusTotal = quizBonuses.reduce((s, b) => s + b.amount, 0);
   if (quizBonusTotal > 0) {
     choreAmount += quizBonusTotal;
+    // 内訳表示は「完了回数 × 金額」で描画されるため、合計と必ず一致するよう
+    // 1行(scheduled=1, completed=1)に正解日数ぶんの合計額をまとめる。
+    const days = quizBonuses.length;
     choreDetails["quizbonus"] = {
-      name: "🧠 クイズ正解ボーナス",
+      name: days > 1 ? `🧠 クイズ正解ボーナス（${days}日分）` : "🧠 クイズ正解ボーナス",
       amount: quizBonusTotal,
-      scheduled: quizBonuses.length,
-      completed: quizBonuses.length,
+      scheduled: 1,
+      completed: 1,
     };
   }
 
