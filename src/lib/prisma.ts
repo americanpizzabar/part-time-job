@@ -144,7 +144,7 @@ const TENANT_MODELS = new Set([
   "FamilyLoan", "FeedItem", "VirtualBankDeposit", "EconomicWeather", "NewsQuiz", "QuizAttempt",
   "IndexFund", "IndexFundTx", "DailyKeyword", "WordMission", "LearningProfile", "MercariSale",
   "BackupSnapshot", "MarketTrade", "DecodeMission",
-  "QuizBonusEarning", "ShadowGhost", "MainframeSolve",
+  "QuizBonusEarning", "ShadowGhost", "MainframeSolve", "GiftMoney",
 ]);
 
 // 子スコープモデル(familyId に加え childProfileId でも分離)。
@@ -156,7 +156,7 @@ const CHILD_SCOPED_MODELS = new Set([
   "MemoryCube", "FamilyLoan", "FeedItem", "VirtualBankDeposit", "QuizAttempt", "IndexFund",
   "IndexFundTx", "WordMission", "LearningProfile", "MercariSale", "BackupSnapshot",
   "MarketTrade", "DecodeMission",
-  "QuizBonusEarning", "ShadowGhost", "MainframeSolve",
+  "QuizBonusEarning", "ShadowGhost", "MainframeSolve", "GiftMoney",
 ]);
 
 const WHERE_OPS = new Set([

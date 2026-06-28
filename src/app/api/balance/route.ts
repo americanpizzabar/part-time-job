@@ -8,10 +8,14 @@ export async function GET(req: Request) {
   const monthStart = searchParams.get("monthStart"); // "YYYY-MM-01"
   const monthEnd = searchParams.get("monthEnd"); // "YYYY-MM-DD"
 
-  const [transactions, savings] = await Promise.all([
+  const [transactions, savings, gifts] = await Promise.all([
     prisma.transaction.findMany(),
     prisma.savingsTransaction.findMany(),
+    prisma.giftMoney.findMany(),
   ]);
+
+  // お年玉・お祝い金は財布(wallet)とは別管理の特別残高
+  const giftBalance = gifts.reduce((s, g) => s + g.amount, 0);
 
   const income = transactions
     .filter(t => t.type === "INCOME")
@@ -48,6 +52,7 @@ export async function GET(req: Request) {
     wallet,
     saved,
     free,
+    giftBalance,
     income,
     expense,
     month: {

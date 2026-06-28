@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireParent } from "@/lib/requireParent";
+import { calculateAllowance } from "@/lib/allowanceCalc";
+import { currentWeekRange } from "@/lib/dateUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -47,9 +49,27 @@ export async function POST(req: Request) {
   }
 
   // settle: 未払いの AllowancePeriod の bonusAmount へ上乗せ
-  const period = periodId
+  let period = periodId
     ? await prisma.allowancePeriod.findUnique({ where: { id: periodId } })
     : await prisma.allowancePeriod.findFirst({ where: { isPaid: false }, orderBy: { startDate: "desc" } });
+
+  // 上乗せ先の未払い期間が無ければ、今週分の期間を自動作成してそこへ上乗せする。
+  // (まだ「集計する」を押していなくてもクイズ報酬を渡せるようにする)
+  if (!period && !periodId) {
+    const config = await prisma.aggregationConfig.findFirst();
+    const { start, end } = currentWeekRange(config?.startDayOfWeek ?? 1);
+    const calc = await calculateAllowance(start, end);
+    period = await prisma.allowancePeriod.create({
+      data: {
+        startDate: start,
+        endDate: end,
+        baseAmount: calc.baseAmount,
+        choreAmount: calc.choreAmount,
+        totalAmount: calc.totalAmount,
+        snapshot: JSON.stringify(calc.choreDetails),
+      },
+    });
+  }
 
   if (!period || period.isPaid) {
     return NextResponse.json({ error: "上乗せ先の未払いお小遣い期間がありません" }, { status: 400 });

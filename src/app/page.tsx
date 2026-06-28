@@ -70,7 +70,7 @@ interface ActiveProject {
   pendingBoostCount: number;
 }
 
-interface Balance { wallet: number; free: number; saved: number; }
+interface Balance { wallet: number; free: number; saved: number; giftBalance: number; }
 interface GoalSummary { id: number; name: string; progress: number; saved: number; targetAmount: number; remaining: number; isAchieved: boolean; }
 
 const KEYWORD_GRADIENT: Record<string, string> = {
@@ -562,6 +562,14 @@ export default function OptisLabPage() {
           <div className="text-sm font-bold text-indigo-600">{optis.creditScore}</div>
         </div>
       </div>
+
+      {/* お年玉・お祝い金(別管理の特別残高) */}
+      {balance && balance.giftBalance > 0 && (
+        <Link href="/budget" className="flex items-center justify-between bg-gradient-to-r from-rose-50 to-amber-50 border border-rose-200 rounded-xl px-4 py-3">
+          <span className="text-sm font-medium text-rose-700">🧧 お年玉・お祝い金</span>
+          <span className="text-lg font-bold text-rose-800">{formatJPY(balance.giftBalance)}</span>
+        </Link>
+      )}
 
       {/* 目標貯金メーター */}
       {topGoal && (

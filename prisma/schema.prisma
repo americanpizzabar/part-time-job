@@ -737,6 +737,24 @@ model MainframeSolve {
   @@index([childProfileId])
 }
 
+// ─── お年玉・お祝い金(別管理の特別残高) ─────────────────────────────────
+// 他人(祖父母・親戚等)からもらったお金を親が記録し、子は残高を閲覧する。
+// 通常の財布(Transaction)とは分離して管理。引き出しはアプリ外(親へ口頭依頼)。
+model GiftMoney {
+  id        Int      @id @default(autoincrement())
+  amount    Float    // 正=入金(お年玉・お祝い金), 負=親による引き出し/調整
+  label     String   // 名目(例: お年玉, 誕生日祝い, 入学祝い)
+  fromWhom  String?  // くれた人(例: おじいちゃん)
+  note      String?  // メモ
+  date      String   // "YYYY-MM-DD"
+  createdAt DateTime @default(now())
+  familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
+  childProfileId String? // 子プロファイル(きょうだい別データ分離)
+
+  @@index([familyId])
+  @@index([childProfileId])
+}
+
 // ─── マルチテナント(家族コンテナ) ─────────────────────────────────────
 // 全データは FamilyID に紐づき、他家族からのアクセスは prisma.ts の
 // テナントガードがサーバー側で一律遮断する。
