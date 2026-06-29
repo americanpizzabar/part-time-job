@@ -51,11 +51,21 @@ export async function GET() {
     const unpaid = ps.find(p => !p.isPaid && p.childProfileId === activeChildId)
       ?? ps.find(p => !p.isPaid);
     if (unpaid) {
+      // 保存スナップショットの行合計(画面表示と同じ completed*amount)
+      let snap: Record<string, { amount: number; completed: number }> = {};
+      try { snap = JSON.parse(unpaid.snapshot ?? "{}"); } catch {}
+      const storedSnapshotSum = Object.values(snap).reduce((s, v) => s + (v.completed * v.amount), 0);
+      // 期間の子スコープで直接ボーナスを引く(テナントガードに依存しない)
+      const bonusForPeriodChild = await basePrisma.quizBonusEarning.findMany({
+        where: { familyId, childProfileId: unpaid.childProfileId, earnedDate: { gte: unpaid.startDate, lte: unpaid.endDate } },
+      });
       const calc = await calculateAllowance(unpaid.startDate, unpaid.endDate);
       recompute = {
         forPeriodId: unpaid.id, periodChild: unpaid.childProfileId,
+        storedChore: unpaid.choreAmount, storedTotal: unpaid.totalAmount, storedSnapshotSum,
         recomputedChore: calc.choreAmount, recomputedTotal: calc.totalAmount,
         foldedQuizLine: !!calc.choreDetails["quizbonus"],
+        bonusForPeriodChild: { count: bonusForPeriodChild.length, total: bonusForPeriodChild.reduce((s, b) => s + b.amount, 0), dates: bonusForPeriodChild.map(b => b.earnedDate) },
       };
     }
   } catch (e) {
