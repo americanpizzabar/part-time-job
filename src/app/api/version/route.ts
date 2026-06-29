@@ -18,10 +18,13 @@ export async function GET() {
   try { activeChildId = await resolveActiveChildId(); } catch (e) { activeChildId = "ERR:" + (e instanceof Error ? e.message : String(e)); }
 
   // 家族内の全データを子IDごとに(テナントガードを通さない basePrisma で familyId だけ手動スコープ)
+  let children: unknown[] = [];
   let periods: unknown[] = [];
   let bonuses: unknown[] = [];
   let recompute: unknown = null;
   try {
+    const cs = await basePrisma.childProfile.findMany({ where: { familyId }, select: { id: true, name: true } });
+    children = cs.map(c => ({ id: c.id, name: c.name }));
     const ps = await basePrisma.allowancePeriod.findMany({
       where: { familyId },
       orderBy: { startDate: "desc" },
@@ -59,5 +62,5 @@ export async function GET() {
     recompute = { error: e instanceof Error ? e.message : String(e) };
   }
 
-  return NextResponse.json({ commit: commit.slice(0, 7), familyId, activeChildId, periods, bonuses, recompute });
+  return NextResponse.json({ commit: commit.slice(0, 7), familyId, activeChildId, children, periods, bonuses, recompute });
 }
