@@ -29,14 +29,18 @@ export async function GET(req: Request) {
     .map(chore => {
       let scheduled = 0;
       let completed = 0;
+      let earned = 0;
 
       for (const date of dates) {
         const isScheduled = chore.schedules.some(s => isChoreScheduledForDate(s, date));
         // 完了 = その日の完了ログ件数(通常+追加、予定変更後も「やった分」を数える)
-        const completedHere = chore.logs.filter(l => l.date === date && l.completed).length;
+        const doneLogs = chore.logs.filter(l => l.date === date && l.completed);
+        const completedHere = doneLogs.length;
 
         if (isScheduled) scheduled++;
         completed += completedHere;
+        // 稼得額は親の修整(amountOverride)を反映した実額で数える
+        earned += doneLogs.reduce((s, l) => s + (l.amountOverride ?? chore.amount), 0);
         // 完了したが予定として数えていない分を機会に加える(completed ≤ scheduled を保証)
         const extraOpportunities = isScheduled
           ? Math.max(0, completedHere - 1)
@@ -50,7 +54,7 @@ export async function GET(req: Request) {
         amount: chore.amount,
         scheduled,
         completed,
-        earned: completed * chore.amount,
+        earned,
         rate: scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0,
       };
     })
@@ -76,10 +80,11 @@ export async function GET(req: Request) {
       for (const chore of chores) {
         for (const date of weekDates) {
           const isScheduled = chore.schedules.some(s => isChoreScheduledForDate(s, date));
-          const completedHere = chore.logs.filter(l => l.date === date && l.completed).length;
+          const doneLogs = chore.logs.filter(l => l.date === date && l.completed);
+          const completedHere = doneLogs.length;
           if (isScheduled) ws++;
           wc += completedHere;
-          we += completedHere * chore.amount;
+          we += doneLogs.reduce((s, l) => s + (l.amountOverride ?? chore.amount), 0);
           ws += isScheduled ? Math.max(0, completedHere - 1) : completedHere;
         }
       }

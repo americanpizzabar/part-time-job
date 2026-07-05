@@ -176,7 +176,7 @@ export default function AllowancePage() {
 
       <div className="space-y-3">
         {periods.map(period => {
-          const snapshot: Record<string, { name: string; amount: number; scheduled: number; completed: number }> =
+          const snapshot: Record<string, { name: string; amount: number; scheduled: number; completed: number; earned?: number }> =
             period.snapshot ? JSON.parse(period.snapshot) : {};
           const isExpanded = expandedId === period.id;
           const bonusPraise = BONUS_PRAISE[period.id % BONUS_PRAISE.length];
@@ -239,7 +239,7 @@ export default function AllowancePage() {
                                   <span className={incomplete ? "text-orange-400 font-medium" : "text-green-500 font-medium"}>
                                     {item.completed}/{item.scheduled}回
                                   </span>
-                                  <span className="font-medium text-gray-800">{formatJPY(item.completed * item.amount)}</span>
+                                  <span className="font-medium text-gray-800">{formatJPY(item.earned ?? item.completed * item.amount)}</span>
                                 </div>
                               </div>
                               {incomplete && (

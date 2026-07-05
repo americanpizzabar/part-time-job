@@ -51,10 +51,10 @@ export async function GET() {
     const unpaid = ps.find(p => !p.isPaid && p.childProfileId === activeChildId)
       ?? ps.find(p => !p.isPaid);
     if (unpaid) {
-      // 保存スナップショットの行合計(画面表示と同じ completed*amount)
-      let snap: Record<string, { amount: number; completed: number }> = {};
+      // 保存スナップショットの行合計(画面表示と同じ earned フォールバック付き)
+      let snap: Record<string, { amount: number; completed: number; earned?: number }> = {};
       try { snap = JSON.parse(unpaid.snapshot ?? "{}"); } catch {}
-      const storedSnapshotSum = Object.values(snap).reduce((s, v) => s + (v.completed * v.amount), 0);
+      const storedSnapshotSum = Object.values(snap).reduce((s, v) => s + (v.earned ?? v.completed * v.amount), 0);
       // 期間の子スコープで直接ボーナスを引く(テナントガードに依存しない)
       const bonusForPeriodChild = await basePrisma.quizBonusEarning.findMany({
         where: { familyId, childProfileId: unpaid.childProfileId, earnedDate: { gte: unpaid.startDate, lte: unpaid.endDate } },

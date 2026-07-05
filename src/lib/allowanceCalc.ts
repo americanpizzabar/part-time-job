@@ -6,6 +6,9 @@ export interface ChoreBreakdown {
   amount: number;
   scheduled: number;
   completed: number;
+  // 実際に稼いだ額(amountOverride 反映後)。表示は必ずこれを使う。
+  // 「completed × amount」は親が金額を修整していると実額とズレるため。
+  earned: number;
 }
 
 export interface AllowanceCalcResult {
@@ -95,6 +98,7 @@ export async function calculateAllowance(
         amount: chore.amount,
         scheduled: scheduledDays,
         completed: completedDays,
+        earned: logSum,
       };
     }
   }
@@ -107,14 +111,13 @@ export async function calculateAllowance(
   const quizBonusTotal = quizBonuses.reduce((s, b) => s + b.amount, 0);
   if (quizBonusTotal > 0) {
     choreAmount += quizBonusTotal;
-    // 内訳表示は「完了回数 × 金額」で描画されるため、合計と必ず一致するよう
-    // 1行(scheduled=1, completed=1)に正解日数ぶんの合計額をまとめる。
     const days = quizBonuses.length;
     choreDetails["quizbonus"] = {
       name: days > 1 ? `🧠 クイズ正解ボーナス（${days}日分）` : "🧠 クイズ正解ボーナス",
       amount: quizBonusTotal,
       scheduled: 1,
       completed: 1,
+      earned: quizBonusTotal,
     };
   }
 
