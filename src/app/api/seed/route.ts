@@ -48,17 +48,24 @@ export async function POST() {
     ],
   });
 
-  await prisma.aggregationConfig.create({
-    data: { periodDays: 7, startDayOfWeek: 1 },
-  });
+  // 既に設定が存在する場合は作らない(重複行があると保存先と読出元がズレる)
+  const existingAgg = await prisma.aggregationConfig.findFirst();
+  if (!existingAgg) {
+    await prisma.aggregationConfig.create({
+      data: { periodDays: 7, startDayOfWeek: 1 },
+    });
+  }
 
-  await prisma.allowanceConfig.create({
-    data: {
-      period: "WEEKLY",
-      amount: 500,
-      startDate: new Date().toISOString().split("T")[0],
-    },
-  });
+  const existingAllowance = await prisma.allowanceConfig.findFirst();
+  if (!existingAllowance) {
+    await prisma.allowanceConfig.create({
+      data: {
+        period: "WEEKLY",
+        amount: 500,
+        startDate: new Date().toISOString().split("T")[0],
+      },
+    });
+  }
 
   return NextResponse.json({ message: "Seeded successfully" });
 }

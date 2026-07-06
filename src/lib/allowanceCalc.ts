@@ -103,21 +103,34 @@ export async function calculateAllowance(
     }
   }
 
-  // デイリー報酬クイズのボーナスは「その日のお手伝い」として集計に組み込む。
+  // デイリー報酬クイズのボーナス/ペナルティは「その日のお手伝い」として集計に組み込む。
   // (週末に別途精算するのではなく、日々のお手伝い実績と一緒に貯まる)
+  // 正の行=正解ボーナス、負の行=ウイルス・ペナルティ(未回答日の翌日強奪)。
   const quizBonuses = await prisma.quizBonusEarning.findMany({
     where: { earnedDate: { gte: startDate, lte: endDate } },
   });
-  const quizBonusTotal = quizBonuses.reduce((s, b) => s + b.amount, 0);
-  if (quizBonusTotal > 0) {
-    choreAmount += quizBonusTotal;
-    const days = quizBonuses.length;
+  const bonusRows = quizBonuses.filter(b => b.amount > 0);
+  const penaltyRows = quizBonuses.filter(b => b.amount < 0);
+  const bonusTotal = bonusRows.reduce((s, b) => s + b.amount, 0);
+  const penaltyTotal = penaltyRows.reduce((s, b) => s + b.amount, 0); // 負値
+  choreAmount += bonusTotal + penaltyTotal;
+
+  if (bonusTotal > 0) {
     choreDetails["quizbonus"] = {
-      name: days > 1 ? `🧠 クイズ正解ボーナス（${days}日分）` : "🧠 クイズ正解ボーナス",
-      amount: quizBonusTotal,
+      name: bonusRows.length > 1 ? `🧠 クイズ正解ボーナス（${bonusRows.length}日分）` : "🧠 クイズ正解ボーナス",
+      amount: bonusTotal,
       scheduled: 1,
       completed: 1,
-      earned: quizBonusTotal,
+      earned: bonusTotal,
+    };
+  }
+  if (penaltyTotal < 0) {
+    choreDetails["quizpenalty"] = {
+      name: penaltyRows.length > 1 ? `🦠 ウイルス被害（${penaltyRows.length}日分）` : "🦠 ウイルス被害",
+      amount: penaltyTotal,
+      scheduled: 1,
+      completed: 1,
+      earned: penaltyTotal,
     };
   }
 

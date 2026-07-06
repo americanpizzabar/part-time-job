@@ -171,6 +171,15 @@ export default function DayView({ day, isToday, isExpanded = false, onRefresh, i
               <span className="text-sm font-bold text-amber-700">＋{formatJPY(quizBonus)}</span>
             </div>
           )}
+          {quizBonus < 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-red-300 bg-red-50 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🦠</span>
+                <span className="text-sm font-medium text-red-700">ウイルス被害（ハック未阻止）</span>
+              </div>
+              <span className="text-sm font-bold text-red-600">−{formatJPY(-quizBonus)}</span>
+            </div>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="w-full flex items-center justify-center gap-2 p-2.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-all text-sm"

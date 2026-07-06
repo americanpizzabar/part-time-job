@@ -48,6 +48,7 @@ interface OptisData {
   hasQuizShield: boolean;
   mercariTotal: number;
   traderUnlocked: boolean;
+  stamina?: { enabled: boolean; starving: boolean; hoursLeft: number };
 }
 
 interface MonthTransaction {
@@ -245,13 +246,22 @@ export default function OptisLabPage() {
       triggerAnim("optis-glitch", "…ピ…バグってる…動けない…");
       return;
     }
+    // 飢餓(エネルギー切れ): カッコいい反応は全消失、死にかけのセリフのみ
+    if (optis?.stamina?.starving) {
+      triggerAnim("optis-glitch", "……エネルギ……不足……ハック……不能……");
+      return;
+    }
     const m = randomMotion(brainType);
     triggerAnim(m.anim, m.text);
   }
 
-  // コア長押し → ダークウェブ(時間制限なし)
+  // コア長押し → ダークウェブ(時間制限なし)。飢餓中は立ち入り完全ロック。
   function coreDown() {
     pressTimer.current = setTimeout(() => {
+      if (optis?.stamina?.starving) {
+        triggerAnim("optis-glitch", "……接続……不能……栄養デ…タ……を…くれ……");
+        return;
+      }
       setGlitch(true);
       setTimeout(() => { setGlitch(false); setDarkWeb(true); }, 600);
     }, 3000);
@@ -275,8 +285,8 @@ export default function OptisLabPage() {
       setEncounterQuiz(info.encounterQuiz);
     }
     const fresh = await fetchAll();
-    // 本日初回ならルーレット起動(進化カットイン中は閉じてから)
-    if (!fresh.spunToday && !fresh.frozen) {
+    // 本日初回ならルーレット起動(進化カットイン中は閉じてから)。飢餓中は権利消失。
+    if (!fresh.spunToday && !fresh.frozen && !fresh.stamina?.starving) {
       if (evoActiveRef.current) {
         pendingRouletteRef.current = true;
       } else {
@@ -659,13 +669,17 @@ export default function OptisLabPage() {
           </div>
         )}
 
-        <button onClick={handleTap} className="active:scale-95 transition-transform" aria-label="Optisにタッチ">
+        <button
+          onClick={handleTap}
+          className={`active:scale-95 transition-transform ${optis.stamina?.starving ? "grayscale contrast-125 opacity-70 animate-pulse" : ""}`}
+          aria-label="Optisにタッチ"
+        >
           <OptisCreature
             form={optis.form}
             stage={optis.stage}
             auraId={optis.equippedAura}
             accessoryId={optis.equippedAccessory}
-            animClass={anim}
+            animClass={optis.stamina?.starving && !anim ? "optis-glitch" : anim}
             frozen={optis.frozen}
             size={220}
             awakeningTier={optis.awakeningTier ?? 0}
@@ -721,7 +735,22 @@ export default function OptisLabPage() {
             ⚠️ 不正検知によりステータス凍結中。反応・経験値が停止しています。
           </div>
         )}
-        {isDarkWebHour() && !optis.frozen && (
+        {/* 飢餓(エネルギー切れ): 裏モード・ルーレット封鎖 + 回復ヒント */}
+        {optis.stamina?.starving && !optis.frozen && (
+          <div className="mt-3 text-xs text-red-300 bg-red-950/60 border border-red-700/60 px-3 py-2 rounded-lg text-center optis-glitch">
+            ⚡ ENERGY DEPLETED ── 全システム機能低下中
+            <div className="text-[10px] text-red-400/80 mt-1">
+              栄養データ(ランチ写真)か会計データを入力して再起動しろ
+            </div>
+          </div>
+        )}
+        {/* スタミナ残量警告(残り6時間未満) */}
+        {optis.stamina?.enabled && !optis.stamina.starving && optis.stamina.hoursLeft < 6 && (
+          <div className="mt-2 text-[10px] text-amber-300/80 text-center">
+            ⚡ エネルギー残り {optis.stamina.hoursLeft} 時間…会計かランチ写真の記録で回復
+          </div>
+        )}
+        {isDarkWebHour() && !optis.frozen && !optis.stamina?.starving && (
           <div className="mt-2 text-[10px] text-cyan-300/70 neon-flicker">コアを3秒長押し…？</div>
         )}
       </div>

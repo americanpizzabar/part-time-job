@@ -231,6 +231,7 @@ export default function AllowancePage() {
                       <div className="space-y-2">
                         {Object.values(snapshot).map(item => {
                           const incomplete = item.completed < item.scheduled;
+                          const lineEarned = item.earned ?? item.completed * item.amount;
                           return (
                             <div key={item.name}>
                               <div className="flex items-center justify-between text-sm">
@@ -239,7 +240,9 @@ export default function AllowancePage() {
                                   <span className={incomplete ? "text-orange-400 font-medium" : "text-green-500 font-medium"}>
                                     {item.completed}/{item.scheduled}回
                                   </span>
-                                  <span className="font-medium text-gray-800">{formatJPY(item.earned ?? item.completed * item.amount)}</span>
+                                  <span className={`font-medium ${lineEarned < 0 ? "text-red-500" : "text-gray-800"}`}>
+                                    {lineEarned < 0 ? `−${formatJPY(-lineEarned)}` : formatJPY(lineEarned)}
+                                  </span>
                                 </div>
                               </div>
                               {incomplete && (

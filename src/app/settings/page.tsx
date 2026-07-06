@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const [quizBonusPerCorrect, setQuizBonusPerCorrect] = useState("0");
   const [quizBonusDailyCap, setQuizBonusDailyCap] = useState("");
   const [quizBonusHardBoost, setQuizBonusHardBoost] = useState("0");
+  const [quizPenaltyAmount, setQuizPenaltyAmount] = useState("0");
+  const [staminaEnabled, setStaminaEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const { role, setRole, mounted } = useRole();
@@ -50,6 +52,8 @@ export default function SettingsPage() {
           setQuizBonusPerCorrect(String(data.aggregation.quizBonusPerCorrect ?? 0));
           setQuizBonusDailyCap(data.aggregation.quizBonusDailyCap != null ? String(data.aggregation.quizBonusDailyCap) : "");
           setQuizBonusHardBoost(String(data.aggregation.quizBonusHardBoost ?? 0));
+          setQuizPenaltyAmount(String(data.aggregation.quizPenaltyAmount ?? 0));
+          setStaminaEnabled(!!data.aggregation.staminaEnabled);
         }
       });
   }, []);
@@ -71,6 +75,8 @@ export default function SettingsPage() {
             quizBonusPerCorrect: Number(quizBonusPerCorrect) || 0,
             quizBonusDailyCap: quizBonusDailyCap === "" ? null : Number(quizBonusDailyCap),
             quizBonusHardBoost: Number(quizBonusHardBoost) || 0,
+            quizPenaltyAmount: Number(quizPenaltyAmount) || 0,
+            staminaEnabled,
           },
         }),
       });
@@ -196,7 +202,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="font-bold text-gray-800">📦 日給・インテリジェンス投資</h2>
             <p className="text-xs text-gray-500 mt-1">
-              毎日1回出題されるクイズに正解すると、子供にボーナスが貯まります。お金は都度引き落とされず「プール」に貯まり、週末に親画面でまとめて精算します。
+              毎日1回出題されるクイズに正解すると、その日のお手伝いにボーナスが自動追加され、お小遣いと一緒に集計されます。子供の画面には親の設定であることは表示されません（闇の報酬という演出になります）。
             </p>
           </div>
           <div>
@@ -246,6 +252,37 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-500 mt-1">
               子供の正解率が上がり大学・大人レベルの「⚠️ブラックポッド」が出たとき、この額まで自動で上乗せします（1日上限の範囲内）。0なら上乗せなし。
             </p>
+          </div>
+          <div className="border-t pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">🦠 ウイルス・ペナルティ（円）</label>
+            <input
+              type="number"
+              value={quizPenaltyAmount}
+              onChange={e => setQuizPenaltyAmount(e.target.value)}
+              step="10"
+              min="0"
+              placeholder="例: 50（0でOFF）"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              その日中にクイズへ正解しなかった場合、翌日この額がお小遣いから「ウイルスに強奪された」として差し引かれます。
+              夜20時になると子供の画面に警告アラームが出ます。ご褒美に反応しない子への「損失回避」トラップです。0でOFF。
+            </p>
+          </div>
+          <div className="border-t pt-4 flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <div className="text-sm font-medium text-gray-700">⚡ Optisスタミナ（24時間エネルギー）</div>
+              <p className="text-xs text-gray-500 mt-1">
+                24時間以内に会計の記録（ランチ写真・0円申告含む）が無いと、Optisがエネルギー切れでバグり、
+                裏モードとルーレットが使えなくなります。記録すれば即回復。相棒のお世話として入力を習慣化させます。
+              </p>
+            </div>
+            <button
+              onClick={() => setStaminaEnabled(!staminaEnabled)}
+              className={`shrink-0 w-14 h-8 rounded-full transition-colors relative ${staminaEnabled ? "bg-green-500" : "bg-gray-300"}`}
+            >
+              <span className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${staminaEnabled ? "left-7" : "left-1"}`} />
+            </button>
           </div>
         </div>
       )}

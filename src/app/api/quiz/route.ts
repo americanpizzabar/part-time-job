@@ -1,12 +1,42 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { toDateStr } from "@/lib/dateUtils";
 import { getOrCreateLearningProfile, LAYER_LABELS } from "@/lib/learningEngine";
 
 export const dynamic = "force-dynamic";
 
+// ウイルス・ペナルティ(損失回避トラップ)の遅延査定:
+// 昨日1問も正解していなければ、ペナルティ額を「強奪」として台帳に負額記録する。
+// アプリを開いたタイミングで昨日分のみ判定(過去に遡って多重徴収しない)。
+// 設定を今日以降に変更した場合は猶予(有効化した日の翌日から発動)。
+async function assessVirusPenalty(now: Date) {
+  const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
+  if (!cfg || cfg.quizPenaltyAmount <= 0) return;
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  if (cfg.updatedAt >= todayStart) return; // 今日設定されたばかり→昨日は対象外
+
+  const yStart = new Date(todayStart.getTime() - 86400000);
+  const yDate = toDateStr(yStart);
+
+  const existing = await prisma.quizBonusEarning.findFirst({ where: { earnedDate: yDate } });
+  if (existing) return; // 昨日はボーナス獲得済み or 徴収済み
+
+  const correctYesterday = await prisma.quizAttempt.findFirst({
+    where: { correct: true, createdAt: { gte: yStart, lt: todayStart } },
+  });
+  if (correctYesterday) return;
+
+  await prisma.quizBonusEarning.create({
+    data: { amount: -cfg.quizPenaltyAmount, isPenalty: true, earnedDate: yDate },
+  }).catch(() => { /* 同時アクセス時は unique 制約に任せる */ });
+}
+
 export async function GET() {
   const now = new Date();
 
+  await assessVirusPenalty(now);
   const profile = await getOrCreateLearningProfile();
 
   // Build the allowed-genre list from parent toggles. If ALL are off, treat as all-on.

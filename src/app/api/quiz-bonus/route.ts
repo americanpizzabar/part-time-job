@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // 今週のデイリー報酬クイズ・ボーナスのサマリーを返す(親のレポート表示用)。
 // ボーナス自体はその日のお手伝いに自動加算され、お小遣い集計に含まれる。
 export async function GET() {
-  const config = await prisma.aggregationConfig.findFirst();
+  const config = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
   const { start, end } = currentWeekRange(config?.startDayOfWeek ?? 1);
   const week = await prisma.quizBonusEarning.findMany({
     where: { earnedDate: { gte: start, lte: end } },

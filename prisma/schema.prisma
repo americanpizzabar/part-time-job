@@ -28,6 +28,10 @@ model AggregationConfig {
   quizBonusPerCorrect Float   @default(0)  // 1問正解あたりの基本ボーナス(円・10円単位)。0で機能OFF
   quizBonusDailyCap   Float?               // 1日あたり上限(例:100円)。null=上限なし
   quizBonusHardBoost  Float   @default(0)  // 黒ポッド(高難度)時の上乗せ上限キャップ(円)
+  // ウイルス・ペナルティ: その日中に正解しないと翌日この額が強奪される(0=OFF)
+  quizPenaltyAmount   Float   @default(0)
+  // Optisスタミナ: 24時間以内に会計/ランチ写真が無いと飢餓状態(裏モード・ルーレット封鎖)
+  staminaEnabled      Boolean @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID
@@ -688,8 +692,9 @@ model DecodeMission {
 // 正解ごとに記録され、週末に親が AllowancePeriod へ精算 or 手渡し済みにする。
 model QuizBonusEarning {
   id              Int       @id @default(autoincrement())
-  amount          Float     // 加算されたボーナス額(円)
+  amount          Float     // 加算されたボーナス額(円)。負=ウイルス・ペナルティ(強奪)
   isHardPod       Boolean   @default(false) // 黒ポッド(高難度)由来か
+  isPenalty       Boolean   @default(false) // ウイルス・ペナルティ(未回答の翌日徴収)か
   earnedDate      String    // "YYYY-MM-DD"(1日1件保証)
   settledAt       DateTime? // 精算済み時刻(null=未精算)
   settledPeriodId Int?      // お小遣いに上乗せした場合の AllowancePeriod ID

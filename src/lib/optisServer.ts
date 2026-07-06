@@ -168,3 +168,33 @@ export async function detectNmdFraud(nmdDate: string | null): Promise<boolean> {
     return isInAfterschoolWindow(new Date(when));
   });
 }
+
+// ─── Optisスタミナ(24時間エネルギー) ─────────────────────────────────
+// 「給餌」= 会計の記録(ランチ写真含む)・NMD申告。最後の給餌から24時間で飢餓状態。
+// 飢餓中は裏モード(ダークウェブ)とルーレットが封鎖される。
+// 有効化直後に即飢餓にならないよう、設定変更時刻も給餌とみなす(猶予24h)。
+export interface StaminaInfo {
+  enabled: boolean;
+  starving: boolean;
+  hoursLeft: number; // 飢餓までの残り時間(飢餓中は0)
+}
+
+export async function computeStamina(nmdDate: string | null): Promise<StaminaInfo> {
+  const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
+  if (!cfg?.staminaEnabled) return { enabled: false, starving: false, hoursLeft: 24 };
+
+  const lastTx = await prisma.transaction.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  const feeds: number[] = [cfg.updatedAt.getTime()];
+  if (lastTx) feeds.push(lastTx.createdAt.getTime());
+  if (nmdDate) feeds.push(new Date(nmdDate + "T23:59:59").getTime());
+
+  const hoursSince = (Date.now() - Math.max(...feeds)) / 3600000;
+  return {
+    enabled: true,
+    starving: hoursSince > 24,
+    hoursLeft: Math.max(0, Math.round((24 - hoursSince) * 10) / 10),
+  };
+}

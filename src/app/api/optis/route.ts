@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { today } from "@/lib/dateUtils";
-import { getOptisState, parseUnlocked, computeDerived, detectNmdFraud } from "@/lib/optisServer";
+import { getOptisState, parseUnlocked, computeDerived, detectNmdFraud, computeStamina } from "@/lib/optisServer";
 import { getPart, creditRank } from "@/lib/optis";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export async function GET() {
   const frozen = !!(state.freezeUntil && state.freezeUntil > new Date());
   const todayStr = today();
 
-  const [derived, savings, activeLoan, crystalCount, shieldAttempt] = await Promise.all([
+  const [derived, savings, activeLoan, crystalCount, shieldAttempt, stamina] = await Promise.all([
     computeDerived(state.experience, state.awakening, state.generation),
     prisma.savingsTransaction.findMany({ orderBy: { date: "desc" } }),
     prisma.familyLoan.findFirst({
@@ -41,6 +41,7 @@ export async function GET() {
       where: { correct: true, shieldUntil: { gt: new Date() } },
       orderBy: { shieldUntil: "desc" },
     }),
+    computeStamina(state.nmdDate),
   ]);
 
   // 物欲アーカイブ: 貯金として我慢できた金額の総計
@@ -65,6 +66,7 @@ export async function GET() {
     freezeUntil: state.freezeUntil,
     langMode: state.langMode,
     hasQuizShield,
+    stamina,
     creditRank: creditRank(state.creditScore),
     ...derived,
     archive: {

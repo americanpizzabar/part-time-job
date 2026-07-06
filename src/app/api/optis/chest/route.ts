@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 // 週(月〜土)の集計範囲を返す。startDayOfWeekを週開始とみなす
 async function weekWindow() {
-  const agg = await prisma.aggregationConfig.findFirst();
+  const agg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
   const startDay = agg?.startDayOfWeek ?? 1;
   const now = new Date();
   const diff = (getDay(now) - startDay + 7) % 7;

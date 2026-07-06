@@ -7,8 +7,9 @@ export async function GET() {
   const allowanceConfig = await prisma.allowanceConfig.findFirst({
     orderBy: { createdAt: "desc" },
   });
+  // 全消費箇所(クイズ・スタミナ・集計)と同じ「最古の1行」を正とする
   const aggregationConfig = await prisma.aggregationConfig.findFirst({
-    orderBy: { createdAt: "desc" },
+    orderBy: { id: "asc" },
   });
   return NextResponse.json({
     allowance: allowanceConfig,
@@ -31,8 +32,15 @@ export async function POST(req: Request) {
   }
 
   if (aggregation) {
-    const { periodDays, startDayOfWeek, weeklyBudget, quizBonusPerCorrect, quizBonusDailyCap, quizBonusHardBoost } = aggregation;
-    const existing = await prisma.aggregationConfig.findFirst();
+    const { periodDays, startDayOfWeek, weeklyBudget, quizBonusPerCorrect, quizBonusDailyCap, quizBonusHardBoost, quizPenaltyAmount, staminaEnabled } = aggregation;
+    // 重複行があると保存先と読出元がズレるため、最古の1行に統一し余剰行は削除する
+    const all = await prisma.aggregationConfig.findMany({ orderBy: { id: "asc" } });
+    const existing = all[0] ?? null;
+    if (all.length > 1) {
+      await prisma.aggregationConfig.deleteMany({
+        where: { id: { in: all.slice(1).map(c => c.id) } },
+      });
+    }
     const config = existing
       ? await prisma.aggregationConfig.update({
           where: { id: existing.id },
@@ -47,6 +55,8 @@ export async function POST(req: Request) {
               quizBonusDailyCap: quizBonusDailyCap === null || quizBonusDailyCap === "" ? null : Number(quizBonusDailyCap),
             }),
             ...(quizBonusHardBoost !== undefined && { quizBonusHardBoost: Number(quizBonusHardBoost) || 0 }),
+            ...(quizPenaltyAmount !== undefined && { quizPenaltyAmount: Number(quizPenaltyAmount) || 0 }),
+            ...(staminaEnabled !== undefined && { staminaEnabled: !!staminaEnabled }),
           },
         })
       : await prisma.aggregationConfig.create({
@@ -57,6 +67,8 @@ export async function POST(req: Request) {
             quizBonusPerCorrect: Number(quizBonusPerCorrect) || 0,
             quizBonusDailyCap: quizBonusDailyCap ? Number(quizBonusDailyCap) : null,
             quizBonusHardBoost: Number(quizBonusHardBoost) || 0,
+            quizPenaltyAmount: Number(quizPenaltyAmount) || 0,
+            staminaEnabled: !!staminaEnabled,
           },
         });
     results.aggregation = config;
