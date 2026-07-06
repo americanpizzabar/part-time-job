@@ -7,7 +7,6 @@ import { ASSET_CATEGORIES, ASSET_META, AssetCategory } from "@/lib/optis";
 import { playTick, playWhoosh, playCombo, playExpGain } from "@/lib/sound";
 import { hapticTap, hapticHeavy, hapticSuccess, hapticCombo } from "@/lib/haptics";
 import { bumpCombo } from "@/lib/combo";
-import PulseDial from "@/components/PulseDial";
 import LunchScanCard from "@/components/LunchScanCard";
 import { recordUsage, getRankedPresets, DynamicPreset } from "@/lib/presetStats";
 
@@ -30,7 +29,8 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
   const [assetCategory, setAssetCategory] = useState<AssetCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [careerFeedback, setCareerFeedback] = useState<string | null>(null);
-  const [inputMode, setInputMode] = useState<"dial" | "keypad">("dial");
+  const [txType, setTxType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
+  const [incomeMemo, setIncomeMemo] = useState("");
   const [combo, setCombo] = useState(0);
   const [orderedPresets] = useState<DynamicPreset[]>(() => getRankedPresets());
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -148,6 +148,35 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
     }
   }
 
+  // 収入の記録: 仕分け・写真ステップは不要で即確定
+  async function commitIncome() {
+    if (saving || amount <= 0) return;
+    setSaving(true);
+    setStep("done");
+    try {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "INCOME",
+          amount,
+          date: today(),
+          memo: incomeMemo.trim() || undefined,
+          reportedAt: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json().catch(() => ({ expGain: 0 }));
+      playExpGain();
+      hapticSuccess();
+      setTimeout(() => {
+        onSaved({ expGain: data.expGain ?? 0, tag: "NEEDS", awakened: data.awakened ?? false, careerFeedback: null, encounterQuiz: data.encounterQuiz ?? null });
+      }, 900);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isIncome = txType === "INCOME";
   const tilt = Math.max(-1, Math.min(1, dragX / 120));
 
   return (
@@ -156,7 +185,7 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
         {/* ヘッダー */}
         <div className="flex items-center justify-between p-4 border-b">
           <h2 className="font-bold text-gray-800">
-            {step === "amount" ? "いくら使った？"
+            {step === "amount" ? (isIncome ? "いくら入った？" : "いくら使った？")
               : step === "sort" ? "どっち？スワイプで仕分け"
               : step === "asset" ? "どんな自己投資？"
               : step === "photo" ? "ランチをスキャン📸"
@@ -169,82 +198,101 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
           </button>
         </div>
 
-        {/* STEP 1: 金額 */}
+        {/* STEP 1: 金額(キー入力のみ) */}
         {step === "amount" && (
           <div className="p-5">
-            {/* 定番ショートカット(浮遊チップ) */}
-            <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
-              {orderedPresets.map(p => (
-                <button
-                  key={`${p.amount}_${p.category}`}
-                  onClick={() => applyPreset(p.amount, p.category)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap
-                    bg-gradient-to-br from-cyan-50 to-blue-50 border border-blue-200 text-blue-700 active:scale-95 transition-transform"
-                >
-                  <span>{p.emoji}</span>
-                  <span>{p.label}</span>
-                  <span className="text-blue-400">¥{p.amount}</span>
-                </button>
-              ))}
+            {/* 支出/収入の切替タブ */}
+            <div className="grid grid-cols-2 gap-1.5 mb-3 bg-gray-100 rounded-xl p-1">
+              <button
+                onClick={() => { setTxType("EXPENSE"); hapticTap(); }}
+                className={`py-2 rounded-lg text-sm font-bold transition-colors
+                  ${!isIncome ? "bg-white text-red-500 shadow" : "text-gray-400"}`}
+              >
+                💸 つかった
+              </button>
+              <button
+                onClick={() => { setTxType("INCOME"); hapticTap(); }}
+                className={`py-2 rounded-lg text-sm font-bold transition-colors
+                  ${isIncome ? "bg-white text-emerald-600 shadow" : "text-gray-400"}`}
+              >
+                💰 もらった
+              </button>
             </div>
 
-            {/* カテゴリ */}
-            <div className="mb-3">
-              <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {EXPENSE_CATEGORIES.map(c => (
-                  <button
-                    key={c}
-                    onClick={() => setCategory(c)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border
-                      ${category === c ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 入力モード切替 */}
-            {inputMode === "dial" ? (
-              <div className="py-2">
-                <PulseDial value={amount} onChange={v => setDigits(v === 0 ? "" : String(v))} />
-                <div className="text-center">
-                  <button onClick={() => setInputMode("keypad")} className="text-xs text-gray-400 underline">
-                    キーで入力する
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {!isIncome && (
               <>
-                <div className="text-center text-4xl font-bold text-gray-800 mb-4 tracking-tight">
-                  ¥{amount.toLocaleString()}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map(k => (
+                {/* 定番ショートカット(浮遊チップ) */}
+                <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
+                  {orderedPresets.map(p => (
                     <button
-                      key={k}
-                      onClick={() => press(k)}
-                      className={`py-4 rounded-xl text-xl font-semibold transition-colors
-                        ${k === "clr" || k === "del" ? "bg-gray-100 text-gray-500 text-base" : "bg-gray-50 text-gray-800 hover:bg-gray-100"}`}
+                      key={`${p.amount}_${p.category}`}
+                      onClick={() => applyPreset(p.amount, p.category)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap
+                        bg-gradient-to-br from-cyan-50 to-blue-50 border border-blue-200 text-blue-700 active:scale-95 transition-transform"
                     >
-                      {k === "del" ? "⌫" : k === "clr" ? "C" : k}
+                      <span>{p.emoji}</span>
+                      <span>{p.label}</span>
+                      <span className="text-blue-400">¥{p.amount}</span>
                     </button>
                   ))}
                 </div>
-                <div className="text-center mt-2">
-                  <button onClick={() => setInputMode("dial")} className="text-xs text-gray-400 underline">
-                    ダイアルで入力する
-                  </button>
+
+                {/* カテゴリ */}
+                <div className="mb-3">
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {EXPENSE_CATEGORIES.map(c => (
+                      <button
+                        key={c}
+                        onClick={() => setCategory(c)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border
+                          ${category === c ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"}`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
 
+            {isIncome && (
+              <input
+                type="text"
+                value={incomeMemo}
+                onChange={e => setIncomeMemo(e.target.value)}
+                placeholder="メモ(例: おばあちゃんから・拾った 等・任意)"
+                className="w-full mb-3 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            )}
+
+            <div className={`text-center text-4xl font-bold mb-4 tracking-tight ${isIncome ? "text-emerald-600" : "text-gray-800"}`}>
+              ¥{amount.toLocaleString()}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clr", "0", "del"].map(k => (
+                <button
+                  key={k}
+                  onClick={() => press(k)}
+                  className={`py-4 rounded-xl text-xl font-semibold transition-colors
+                    ${k === "clr" || k === "del" ? "bg-gray-100 text-gray-500 text-base" : "bg-gray-50 text-gray-800 hover:bg-gray-100"}`}
+                >
+                  {k === "del" ? "⌫" : k === "clr" ? "C" : k}
+                </button>
+              ))}
+            </div>
+
             <button
-              onClick={() => { if (amount > 0) { hapticTap(); setStep("sort"); } }}
-              disabled={amount <= 0}
-              className="mt-4 w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold disabled:opacity-40"
+              onClick={() => {
+                if (amount <= 0) return;
+                hapticTap();
+                if (isIncome) commitIncome();
+                else setStep("sort");
+              }}
+              disabled={amount <= 0 || saving}
+              className={`mt-4 w-full text-white py-3.5 rounded-xl font-semibold disabled:opacity-40
+                ${isIncome ? "bg-emerald-600" : "bg-blue-600"}`}
             >
-              つぎへ
+              {isIncome ? "収入を記録する" : "つぎへ"}
             </button>
           </div>
         )}
@@ -363,9 +411,9 @@ export default function QuickAddModal({ onClose, onSaved }: QuickAddModalProps) 
             <div className="absorb-fly" style={{ ["--ax" as string]: committed === "NEEDS" ? "-40px" : "40px" }}>
               <div
                 className="rounded-2xl px-6 py-5 text-white font-bold shadow-2xl"
-                style={{ background: committed === "NEEDS" ? "#3b82f6" : "#ec4899" }}
+                style={{ background: isIncome ? "#10b981" : committed === "NEEDS" ? "#3b82f6" : "#ec4899" }}
               >
-                ¥{amount.toLocaleString()}
+                {isIncome ? "＋" : ""}¥{amount.toLocaleString()}
               </div>
             </div>
             {assetCategory && (

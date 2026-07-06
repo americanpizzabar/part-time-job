@@ -241,6 +241,22 @@ export default function BudgetPage() {
         </div>
       )}
 
+      {/* この月の収入と支出(上部) */}
+      {balance && (
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => openBreakdown("income")} className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
+            <div className="text-xs text-gray-500">{month0 + 1}月の収入</div>
+            <div className="text-base font-bold text-blue-600 mt-0.5">{formatJPY(balance.month.income)}</div>
+            <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+          </button>
+          <button onClick={() => openBreakdown("expense")} className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
+            <div className="text-xs text-gray-500">{month0 + 1}月の支出</div>
+            <div className="text-base font-bold text-red-500 mt-0.5">{formatJPY(balance.month.expense)}</div>
+            <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
+          </button>
+        </div>
+      )}
+
       {/* 月ナビ */}
       <div className="flex items-center justify-between">
         <button onClick={prevMonth} className="p-2 text-gray-600 hover:text-gray-900">
@@ -367,18 +383,6 @@ export default function BudgetPage() {
               />
               <div className="mt-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
                 💡 {needsWantsFeedback(balance.month.needsRatio, balance.month.wantsRatio, balance.month.total)}
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-3 text-center">
-                <button onClick={() => openBreakdown("income")} className="bg-gray-50 rounded-lg p-2 active:bg-gray-100 transition-colors">
-                  <div className="text-xs text-gray-500">今月の収入</div>
-                  <div className="text-sm font-bold text-blue-600">{formatJPY(balance.month.income)}</div>
-                  <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
-                </button>
-                <button onClick={() => openBreakdown("expense")} className="bg-gray-50 rounded-lg p-2 active:bg-gray-100 transition-colors">
-                  <div className="text-xs text-gray-500">今月の支出</div>
-                  <div className="text-sm font-bold text-red-500">{formatJPY(balance.month.expense)}</div>
-                  <div className="text-[9px] text-gray-300 mt-0.5">タップで明細</div>
-                </button>
               </div>
             </div>
           )}

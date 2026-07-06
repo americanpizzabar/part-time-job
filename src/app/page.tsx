@@ -71,7 +71,7 @@ interface ActiveProject {
   pendingBoostCount: number;
 }
 
-interface Balance { wallet: number; free: number; saved: number; }
+interface Balance { wallet: number; free: number; saved: number; month?: { income: number; expense: number }; }
 interface GoalSummary { id: number; name: string; progress: number; saved: number; targetAmount: number; remaining: number; isAchieved: boolean; }
 
 const KEYWORD_GRADIENT: Record<string, string> = {
@@ -146,7 +146,7 @@ export default function OptisLabPage() {
     const { start, end } = currentMonthRange();
     const [o, b, goals, projects, brain, tx, acc] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
-      fetch("/api/balance").then(r => r.json()),
+      fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
       fetch("/api/goals").then(r => r.json()),
       fetch("/api/projects").then(r => r.json()),
       fetch("/api/brain").then(r => r.json()).catch(() => ({ brainType: "BALANCED" })),
@@ -549,6 +549,18 @@ export default function OptisLabPage() {
           </div>
         </div>
       )}
+
+      {/* 今月の収入と支出(最上部) */}
+      <div className="grid grid-cols-2 gap-2">
+        <Link href="/budget" className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
+          <div className="text-[10px] text-gray-400">今月の収入</div>
+          <div className="text-base font-bold text-blue-600">{balance?.month ? formatJPY(balance.month.income) : "—"}</div>
+        </Link>
+        <Link href="/budget" className="bg-white rounded-xl border border-gray-200 p-3 text-center active:bg-gray-50 transition-colors">
+          <div className="text-[10px] text-gray-400">今月の支出</div>
+          <div className="text-base font-bold text-red-500">{balance?.month ? formatJPY(balance.month.expense) : "—"}</div>
+        </Link>
+      </div>
 
       {/* きょうだいバトル(2人以上のときだけ表示) */}
       <SiblingBattleCard />
