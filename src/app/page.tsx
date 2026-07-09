@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
+import { formatJPY } from "@/lib/dateUtils";
 import { useRole } from "@/lib/useRole";
 import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour, generationBonus, CRYSTALLIZE_MIN_LEVEL, CRYSTALLIZE_MIN_STAGE } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
@@ -15,8 +15,6 @@ import ChestBanner from "@/components/ChestBanner";
 import EvolutionCutin from "@/components/EvolutionCutin";
 import QuizBanner from "@/components/QuizBanner";
 import DataPod from "@/components/DataPod";
-import MoneyFlow from "@/components/MoneyFlow";
-import SyncBarometer from "@/components/SyncBarometer";
 import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
 import SiblingBattleCard from "@/components/SiblingBattleCard";
 
@@ -50,17 +48,6 @@ interface OptisData {
   traderUnlocked: boolean;
   stamina?: { enabled: boolean; starving: boolean; hoursLeft: number };
 }
-
-interface MonthTransaction {
-  id: number;
-  type: "INCOME" | "EXPENSE";
-  amount: number;
-  needsWants: "NEEDS" | "WANTS" | null;
-  category: string;
-  date: string;
-}
-
-interface GenreAccuracy { genre: string; label: string; total: number; correct: number; accuracy: number; }
 
 interface ActiveProject {
   id: number;
@@ -114,9 +101,6 @@ export default function OptisLabPage() {
     title: string; note?: string; total: number; totalPositive: boolean;
     rows: BreakdownRow[]; loading: boolean;
   } | null>(null);
-  const [monthTx, setMonthTx] = useState<MonthTransaction[]>([]);
-  const [syncAccuracy, setSyncAccuracy] = useState(0);
-  const [syncGenres, setSyncGenres] = useState<{ label: string; accuracy: number }[]>([]);
   const [encounterQuiz, setEncounterQuiz] = useState<{ id: number; question: string; options: string[]; layer: number; isHot: boolean; hotReward: number } | null>(null);
   const [quizBonusOn, setQuizBonusOn] = useState(false);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
@@ -143,15 +127,12 @@ export default function OptisLabPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const { start, end } = currentMonthRange();
-    const [o, b, goals, projects, brain, tx, acc] = await Promise.all([
+    const [o, b, goals, projects, brain] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
       fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
       fetch("/api/goals").then(r => r.json()),
       fetch("/api/projects").then(r => r.json()),
       fetch("/api/brain").then(r => r.json()).catch(() => ({ brainType: "BALANCED" })),
-      fetch(`/api/transactions?startDate=${start}&endDate=${end}`).then(r => r.json()).catch(() => []),
-      fetch("/api/learning/accuracy").then(r => r.json()).catch(() => null),
     ]);
     // デイリー報酬クイズ設定(失敗しても他に影響させない)
     fetch("/api/config").then(r => r.json()).then(cfg => {
@@ -159,11 +140,6 @@ export default function OptisLabPage() {
     }).catch(() => {});
     setOptis(o);
     setBalance(b);
-    setMonthTx(Array.isArray(tx) ? (tx as MonthTransaction[]) : []);
-    if (acc) {
-      setSyncAccuracy(acc.overall?.accuracy ?? 0);
-      setSyncGenres(((acc.genres ?? []) as GenreAccuracy[]).map(g => ({ label: g.label, accuracy: g.accuracy })));
-    }
     if (brain?.brainType) setBrainType(brain.brainType as BrainType);
     const active = (goals as GoalSummary[]).filter(g => !g.isAchieved);
     setTopGoal(active.length > 0 ? active[0] : null);
@@ -779,12 +755,6 @@ export default function OptisLabPage() {
           <div style={{ width: `${optis.wantsRatio}%`, background: "#ec4899" }} />
         </div>
       </div>
-
-      {/* マネー・フロー */}
-      <MoneyFlow transactions={monthTx} />
-
-      {/* シンクロ(正答率)バロメーター */}
-      <SyncBarometer accuracy={syncAccuracy} genres={syncGenres} />
 
       {/* 導線 */}
       <div className="grid grid-cols-2 gap-2">
