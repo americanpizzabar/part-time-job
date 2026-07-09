@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { formatJPY } from "@/lib/dateUtils";
+import { formatJPY, currentMonthRange } from "@/lib/dateUtils";
 import { useRole } from "@/lib/useRole";
 import { OptisForm, BrainType, FORM_META, STAGE_LABEL, randomMotion, isDarkWebHour, generationBonus, CRYSTALLIZE_MIN_LEVEL, CRYSTALLIZE_MIN_STAGE } from "@/lib/optis";
 import { playExpGain, playNmdClaim } from "@/lib/sound";
@@ -127,6 +127,7 @@ export default function OptisLabPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
+    const { start, end } = currentMonthRange();
     const [o, b, goals, projects, brain] = await Promise.all([
       fetch("/api/optis").then(r => r.json()),
       fetch(`/api/balance?monthStart=${start}&monthEnd=${end}`).then(r => r.json()),
