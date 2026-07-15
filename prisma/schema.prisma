@@ -742,6 +742,27 @@ model MainframeSolve {
   @@index([childProfileId])
 }
 
+// ─── 闇取引(BLACK DEAL): 1日1回の覆面ディーラー ─────────────────────────
+// 「安すぎる話は裏を取れ」を体感させる与信教育ギミック。
+// 真贋(legit)はサーバー内でのみ判定し、鑑定(inspected)するまで開示しない。
+model BlackDeal {
+  id        Int      @id @default(autoincrement())
+  date      String   // "YYYY-MM-DD"
+  partId    String   // 提示されたパーツ
+  price     Float    // 提示価格(Gコイン)
+  basePrice Float    // 相場(レアリティ基準価格)
+  legit     Boolean  // 真正品か
+  inspected Boolean  @default(false) // 鑑定済みか
+  outcome   String?  // WIN_PART / WIN_JACKPOT / SCAMMED (購入前は null)
+  createdAt DateTime @default(now())
+  familyId  String   @default("default-family")
+  childProfileId String?
+
+  @@unique([familyId, childProfileId, date])
+  @@index([familyId])
+  @@index([childProfileId])
+}
+
 // ─── お年玉・お祝い金(別管理の特別残高) ─────────────────────────────────
 // 他人(祖父母・親戚等)からもらったお金を親が記録し、子は残高を閲覧する。
 // 通常の財布(Transaction)とは分離して管理。引き出しはアプリ外(親へ口頭依頼)。

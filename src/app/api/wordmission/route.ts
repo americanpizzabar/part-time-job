@@ -25,5 +25,16 @@ export async function GET() {
     where: { isActive: true },
     orderBy: { id: "asc" },
   });
-  return NextResponse.json(missions);
+  // 正解インデックスはクライアントに渡さない(サーバー側で検証する)
+  const safe = missions.map(m => ({
+    id: m.id,
+    word: m.word,
+    translation: m.translation,
+    choices: m.choices,
+    hint: m.hint,
+    expReward: m.expReward,
+    isActive: m.isActive,
+    solvedAt: m.solvedAt,
+  }));
+  return NextResponse.json(safe);
 }

@@ -410,10 +410,11 @@ export function isInAfterschoolWindow(d: Date): boolean {
   return h >= AFTERSCHOOL_START_HOUR && h < AFTERSCHOOL_END_HOUR;
 }
 
-// Dark Web Mode 解放時間帯(21:00-24:00) → バジェット・シミュレーター
-export function isDarkWebHour(d: Date = new Date()): boolean {
+// Dark Web Mode 解放時間帯(〜24:00) → バジェット・シミュレーター
+// 開始時刻は転生世代で早まる(generationBonus.darkWebHour: 21 → 20 → 19)。
+export function isDarkWebHour(d: Date = new Date(), generation: number = 1): boolean {
   const h = d.getHours();
-  return h >= 21 && h <= 23;
+  return h >= generationBonus(generation).darkWebHour && h <= 23;
 }
 
 // --- マイ・プロジェクト(クラファン型 親子マッチング投資) ----------
@@ -738,4 +739,80 @@ export function rawDataForPart(id: string): number {
   const p = getPart(id);
   if (!p) return 0;
   return RAW_DATA_BY_RARITY[p.rarity] ?? 0;
+}
+
+// ─── ハッカーREP(名声)ランク ────────────────────────────────────────────
+// ダークウェブでの実績(解読・暗号解除・ライバル撃破・密造・深部クラック等)から
+// 算出される「裏社会での信用度」。ランクが上がると闇取引などの深部が解放される。
+export interface DarkRepRank {
+  idx: number;
+  name: string;
+  emoji: string;
+  minRep: number;
+}
+
+export const DARK_REP_RANKS: DarkRepRank[] = [
+  { idx: 0, name: "スクリプト・キディ", emoji: "🐣", minRep: 0 },
+  { idx: 1, name: "サイファー見習い",   emoji: "🔰", minRep: 50 },
+  { idx: 2, name: "クラッカー",         emoji: "🎭", minRep: 150 },
+  { idx: 3, name: "エリート・ファントム", emoji: "👻", minRep: 300 },
+  { idx: 4, name: "ダークロード",       emoji: "👑", minRep: 500 },
+];
+
+export function darkRepRank(rep: number): DarkRepRank {
+  let cur = DARK_REP_RANKS[0];
+  for (const r of DARK_REP_RANKS) if (rep >= r.minRep) cur = r;
+  return cur;
+}
+
+export function nextDarkRepRank(rep: number): DarkRepRank | null {
+  return DARK_REP_RANKS.find(r => r.minRep > rep) ?? null;
+}
+
+// REP換算レート(実績1件あたり)
+export const REP_WEIGHTS = {
+  decode: 8,      // データ解読ミッション
+  word: 6,        // ワードミッション(暗号解除)
+  mainframe: 40,  // メインフレーム・クラック(隔週)
+  ghost: 30,      // シャドウ・チェイサー撃破(週次)
+  craft: 20,      // ジャンク屋での密造
+  drop: 5,        // シークレット・ドロップ回収
+  quizCorrect: 2, // デイリークイズ正解(上限100)
+} as const;
+
+// ─── 闇取引(BLACK DEAL) ──────────────────────────────────────────────
+// 1日1回、覆面ディーラーが「相場より安すぎる」パーツを持ちかけてくる。
+// 真正品(62%)か粗悪品(38%)かは買うまで分からないが、鑑定料を払えば事前に判明する。
+// 「うまい話ほど裏を取れ(情報にはコストを払う価値がある)」を体感させる金融教育ギミック。
+export const BLACKDEAL_MIN_REP = 50;        // サイファー見習い以上で解放
+export const BLACKDEAL_LEGIT_PCT = 62;      // 真正品の確率(%)
+export const BLACKDEAL_SCAM_CONSOLATION = 15; // 粗悪品時の慰謝料(生データ)
+export const BLACKDEAL_JACKPOT_RATE = 1.5;  // 真正品だが所持済みのとき: 価格×1.5のGコイン還元
+
+export interface BlackDealSpec {
+  partId: string;
+  price: number;       // 提示価格(相場の45〜65%)
+  basePrice: number;   // 相場(レアリティ基準価格)
+  legit: boolean;      // 真正品か(サーバー内でのみ判定に使用)
+}
+
+// familyId+childProfileId+日付から決定論的に本日の取引を生成する。
+export function generateBlackDeal(seed: string): BlackDealSpec {
+  // レアリティ: UNCOMMON 50% / RARE 35% / LEGENDARY 15%
+  const r = seededInt(seed + ":rar", 100);
+  const rarity: Rarity = r < 50 ? "UNCOMMON" : r < 85 ? "RARE" : "LEGENDARY";
+  const pool = PARTS.filter(p => p.rarity === rarity && !UNDISASSEMBLABLE.has(p.id));
+  const part = pool[seededInt(seed + ":part", Math.max(1, pool.length))] ?? PARTS[0];
+  const basePrice = MARKET_BASE_PRICES[rarity];
+  // 45〜65%の激安提示(安すぎる=罠かもしれない、が成立する価格帯)
+  const factor = 45 + seededInt(seed + ":price", 21);
+  const price = Math.max(5, Math.round((basePrice * factor) / 100 / 5) * 5);
+  const legit = seededInt(seed + ":legit", 100) < BLACKDEAL_LEGIT_PCT;
+  return { partId: part.id, price, basePrice, legit };
+}
+
+// 鑑定料: 提示価格の15%(REPランクが上がるとディーラーの信用がつき割引)。
+export function blackDealInspectCost(price: number, rankIdx: number): number {
+  const rate = rankIdx >= 3 ? 0.10 : rankIdx >= 2 ? 0.12 : 0.15;
+  return Math.max(5, Math.round((price * rate) / 5) * 5);
 }

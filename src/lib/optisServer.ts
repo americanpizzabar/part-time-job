@@ -198,3 +198,45 @@ export async function computeStamina(nmdDate: string | null): Promise<StaminaInf
     hoursLeft: Math.max(0, Math.round((24 - hoursSince) * 10) / 10),
   };
 }
+
+// ─── ハッカーREP(名声)の集計 ─────────────────────────────────────────
+// ダークウェブ実績をDBから集計してREPを算出する。テナントスコープは prisma 経由で自動適用。
+import { REP_WEIGHTS, darkRepRank, nextDarkRepRank, DarkRepRank } from "@/lib/optis";
+
+export interface DarkRep {
+  rep: number;
+  rank: DarkRepRank;
+  next: { rank: DarkRepRank; remaining: number } | null;
+  breakdown: { label: string; count: number; rep: number }[];
+}
+
+export async function computeDarkRep(): Promise<DarkRep> {
+  const [decode, word, mainframe, ghost, craft, drop, quizCorrect] = await Promise.all([
+    prisma.decodeMission.count({ where: { solvedAt: { not: null } } }),
+    prisma.wordMission.count({ where: { solvedAt: { not: null } } }),
+    prisma.mainframeSolve.count({ where: { correct: true } }),
+    prisma.shadowGhost.count({ where: { defeated: true } }),
+    prisma.rewardLog.count({ where: { source: "CRAFT" } }),
+    prisma.rewardLog.count({ where: { source: "DROP" } }),
+    prisma.quizAttempt.count({ where: { correct: true } }),
+  ]);
+
+  const rows = [
+    { label: "データ解読",       count: decode,    rep: decode * REP_WEIGHTS.decode },
+    { label: "ワード暗号解除",   count: word,      rep: word * REP_WEIGHTS.word },
+    { label: "メインフレーム攻略", count: mainframe, rep: mainframe * REP_WEIGHTS.mainframe },
+    { label: "ライバル撃破",     count: ghost,     rep: ghost * REP_WEIGHTS.ghost },
+    { label: "パーツ密造",       count: craft,     rep: craft * REP_WEIGHTS.craft },
+    { label: "シークレット回収", count: drop,      rep: drop * REP_WEIGHTS.drop },
+    { label: "クイズ正解",       count: quizCorrect, rep: Math.min(100, quizCorrect * REP_WEIGHTS.quizCorrect) },
+  ];
+  const rep = rows.reduce((s, r) => s + r.rep, 0);
+  const rank = darkRepRank(rep);
+  const nx = nextDarkRepRank(rep);
+  return {
+    rep,
+    rank,
+    next: nx ? { rank: nx, remaining: nx.minRep - rep } : null,
+    breakdown: rows.filter(r => r.count > 0),
+  };
+}

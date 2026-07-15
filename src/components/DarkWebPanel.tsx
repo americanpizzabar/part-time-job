@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { formatJPY } from "@/lib/dateUtils";
-import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType, creditRank, PartEffect } from "@/lib/optis";
+import { PARTS, RARITY_META, Part, BRAIN_META, BrainType, FEED_CATEGORY_META, marketSellPrice, ASSET_META, WEATHER_META, WeatherType, creditRank, PartEffect, GCOIN_BANK_RATE, MARKET_SELL_FEE, generationBonus, DarkRepRank } from "@/lib/optis";
 import type { MissionType } from "@/lib/dailyMissions";
 import GuildPanel from "@/components/GuildPanel";
 import CodeRain from "@/components/CodeRain";
@@ -99,7 +99,35 @@ interface QuizStatus {
   lastAnswered: { correct: boolean; createdAt: string } | null;
 }
 
-type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "ghost" | "core" | "junk" | "closet" | "status";
+type Tab = "matrix" | "decode" | "oracle" | "market" | "quiz" | "brain" | "feed" | "bank" | "fund" | "guild" | "ghost" | "core" | "junk" | "deal" | "closet" | "status";
+
+// ハッカーREP + 闇取引のレスポンス型
+interface DarkRepData {
+  rep: number;
+  rank: DarkRepRank;
+  next: { rank: DarkRepRank; remaining: number } | null;
+  breakdown: { label: string; count: number; rep: number }[];
+  blackDealUnlocked: boolean;
+  blackDealMinRep: number;
+}
+interface BlackDealData {
+  locked: boolean;
+  rep: number;
+  minRep?: number;
+  rank: DarkRepRank;
+  deal?: {
+    date: string;
+    part: { id: string; name: string; emoji: string; rarity: string } | null;
+    price: number;
+    basePrice: number;
+    discountPct: number;
+    inspected: boolean;
+    legit: boolean | null;
+    outcome: string | null;
+    inspectCost: number;
+    gcoins: number;
+  };
+}
 
 interface GhostData {
   weekKey: string;
@@ -194,7 +222,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [fundWithdrawAmt, setFundWithdrawAmt] = useState("");
   const [fundMsg, setFundMsg] = useState("");
   const [langMsg, setLangMsg] = useState("");
-  const [missions, setMissions] = useState<{id:number;word:string;translation:string;choices:string[];correctIndex:number;hint:string;expReward:number;isActive:boolean;solvedAt:string|null}[]>([]);
+  const [missions, setMissions] = useState<{id:number;word:string;translation:string;choices:string[];hint:string;expReward:number;isActive:boolean;solvedAt:string|null}[]>([]);
   const [missionResult, setMissionResult] = useState<{id:number;correct:boolean;word:string;translation:string} | null>(null);
   // ORACLE (神託) — 総資産 & 未来予測
   const [balance, setBalance] = useState<{ wallet: number; free: number; saved: number } | null>(null);
@@ -221,6 +249,11 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const [mfResult, setMfResult] = useState<{ correct: boolean; explanation: string; newPart: boolean } | null>(null);
   const [mfHackOverlay, setMfHackOverlay] = useState(false);
   const [junk, setJunk] = useState<JunkData | null>(null);
+  const [darkRep, setDarkRep] = useState<DarkRepData | null>(null);
+  const [blackDeal, setBlackDeal] = useState<BlackDealData | null>(null);
+  const [dealMsg, setDealMsg] = useState("");
+  const [dealBusy, setDealBusy] = useState(false);
+  const [dealResult, setDealResult] = useState<{ outcome: string; lesson: string; jackpot?: number; rawDataGained?: number } | null>(null);
   const [junkMsg, setJunkMsg] = useState("");
   const [craftResult, setCraftResult] = useState<{ name: string; emoji: string; vocab: { word: string; meaning: string } | null } | null>(null);
   const [drop, setDrop] = useState<DropStatus | null>(null);
@@ -250,6 +283,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     fetch("/api/ghost").then(r => r.json()).then(setGhost).catch(() => {});
     fetch("/api/mainframe").then(r => r.json()).then(setMainframe).catch(() => {});
     fetch("/api/junk").then(r => r.json()).then(setJunk).catch(() => {});
+    fetch("/api/darkrep").then(r => r.json()).then(setDarkRep).catch(() => {});
+    fetch("/api/blackdeal").then(r => r.json()).then(setBlackDeal).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 
@@ -419,6 +454,36 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
     }
   }
 
+  // 闇取引: 鑑定 or 購入
+  async function dealAction(action: "inspect" | "buy") {
+    if (dealBusy) return;
+    setDealBusy(true);
+    try {
+      const r = await fetch("/api/blackdeal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setDealMsg(data.error ?? "取引に失敗した");
+        setTimeout(() => setDealMsg(""), 3000);
+        return;
+      }
+      if (action === "inspect") {
+        setDealMsg(data.message ?? "");
+        setTimeout(() => setDealMsg(""), 6000);
+      } else {
+        setDealResult({ outcome: data.outcome, lesson: data.lesson, jackpot: data.jackpot, rawDataGained: data.rawDataGained });
+      }
+      fetch("/api/blackdeal").then(r => r.json()).then(setBlackDeal).catch(() => {});
+      fetch("/api/optis").then(r => r.json()).then(setState);
+      onChanged();
+    } finally {
+      setDealBusy(false);
+    }
+  }
+
   async function deposit() {
     const amt = Number(depositAmt);
     if (!amt) return;
@@ -428,7 +493,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
       body: JSON.stringify({ amount: amt }),
     });
     const data = await r.json();
-    setDepositMsg(r.ok ? `✅ ${amt}G を預け入れました。満期 +${Math.round(amt * 0.1)}G` : data.error);
+    setDepositMsg(r.ok ? `✅ ${amt}G を預け入れました。満期 +${Math.round(amt * GCOIN_BANK_RATE)}G` : data.error);
     setDepositAmt("");
     fetch("/api/bank").then(r => r.json()).then(setBankData);
     fetch("/api/optis").then(r => r.json()).then(setState);
@@ -543,7 +608,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const TABS: [Tab, string][] = [
     ["matrix", "MATRIX"], ["decode", "DECODE"], ["oracle", "ORACLE"], ["market", "MARKET"], ["quiz", "QUIZ"],
     ["brain", "BRAIN"], ["feed", "FEED"], ["bank", "BANK"], ["fund", "FUND"], ["guild", "GUILD"],
-    ["ghost", "GHOST"], ["core", "CORE"], ["junk", "JUNK"], ["closet", "CLOSET"], ["status", "STATUS"],
+    ["ghost", "GHOST"], ["core", "CORE"], ["junk", "JUNK"], ["deal", "DEAL"], ["closet", "CLOSET"],
+    ["status", "STATUS"],
   ];
 
   const decodePending = decode.filter(m => !m.solvedAt).length;
@@ -552,6 +618,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
   const ghostClaimable = !!(ghost?.canClaim && !ghost.ghost.defeated);
   const mainframeReady = !!(mainframe?.unlocked && !mainframe.solved);
   const junkCraftable = !!junk?.canCraft;
+  const dealPending = !!(blackDeal && !blackDeal.locked && blackDeal.deal && !blackDeal.deal.outcome);
 
   // ── ORACLE 計算: 総資産(リアルマネー=円) & 複利による未来予測 ──
   // 注: 銀行預金は G-COIN(ゲーム内通貨)なので円の総資産には合算しない
@@ -600,7 +667,12 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
             </h1>
             {generation > 1 && (
               <div className="text-[10px] text-fuchsia-400 font-mono mt-0.5">
-                ◈ GENERATION {generation} — 転生ボーナス +{(generation - 1) * 10}% EXP
+                ◈ GENERATION {generation} — 転生ボーナス +{Math.round((generationBonus(generation).expMultiplier - 1) * 100)}% EXP
+              </div>
+            )}
+            {darkRep && (
+              <div className="text-[10px] text-amber-400/90 font-mono mt-0.5">
+                {darkRep.rank.emoji} {darkRep.rank.name} — REP {darkRep.rep}
               </div>
             )}
           </div>
@@ -611,7 +683,8 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
         <div className="grid grid-cols-5 gap-1 mb-5">
           {TABS.map(([t, l]) => {
             const dot = (t === "decode" && decodePending > 0) || (t === "status" && darkChargePending) || (t === "guild" && guildClaimable > 0)
-              || (t === "ghost" && ghostClaimable) || (t === "core" && mainframeReady) || (t === "junk" && junkCraftable);
+              || (t === "ghost" && ghostClaimable) || (t === "core" && mainframeReady) || (t === "junk" && junkCraftable)
+              || (t === "deal" && dealPending);
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`relative py-1.5 text-[9px] font-mono rounded border transition-colors ${tab === t ? "bg-cyan-900/60 border-cyan-400 text-cyan-200" : "border-cyan-900/40 text-cyan-700 hover:text-cyan-500"}`}>
@@ -979,7 +1052,7 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
                       {"★".repeat(market.awakeningTier ?? 0)}{"☆".repeat(4 - (market.awakeningTier ?? 0))}
                     </div>
                     <div className="text-[9px] text-emerald-600">
-                      売却手数料: {Math.round((market.sellFee ?? 0.15) * 100)}%
+                      売却手数料: {Math.round((market.sellFee ?? MARKET_SELL_FEE) * 100)}%
                       {(market.awakeningTier ?? 0) > 0 && <span className="text-green-400 ml-1">↓ 自己投資効果</span>}
                     </div>
                   </div>
@@ -1720,6 +1793,126 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
           </div>
         )}
 
+        {/* ── DEAL (闇取引) ─────────────────────────────────────── */}
+        {tab === "deal" && (
+          <div className="space-y-3">
+            <div className="border border-red-900/60 rounded-xl p-4 bg-black/60">
+              <div className="text-[11px] text-red-400 tracking-widest mb-1">// BLACK_DEAL — 覆面ディーラー</div>
+
+              {/* REPロック */}
+              {blackDeal?.locked && (
+                <div className="text-center py-6 font-mono">
+                  <div className="text-4xl mb-2">🚪</div>
+                  <div className="text-red-300 text-sm font-bold mb-1">「……新入りか。まだお前と話すことはない」</div>
+                  <div className="text-[11px] text-red-400/70 mb-3">
+                    裏社会での実績(REP)が {blackDeal.minRep} を超えると、ディーラーが取引テーブルに招く。
+                  </div>
+                  <div className="text-xs text-amber-400">
+                    現在: {darkRep?.rank.emoji} REP {blackDeal.rep} / {blackDeal.minRep}
+                  </div>
+                  <div className="mt-2 h-1.5 bg-red-950 rounded-full overflow-hidden max-w-[200px] mx-auto">
+                    <div className="h-full bg-gradient-to-r from-red-600 to-amber-500" style={{ width: `${Math.min(100, Math.round((blackDeal.rep / (blackDeal.minRep || 1)) * 100))}%` }} />
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-3">
+                    解読・暗号解除・ライバル撃破・密造でREPを稼げ
+                  </div>
+                </div>
+              )}
+
+              {/* 取引テーブル */}
+              {blackDeal && !blackDeal.locked && blackDeal.deal && (
+                <div className="font-mono">
+                  <div className="text-gray-400 text-[11px] mb-3 leading-relaxed">
+                    「よう。今日の"ブツ"だ。相場の{100 - blackDeal.deal.discountPct}%で譲ってやる。
+                    ……本物かどうか？ 自分の目で確かめな。鑑定屋を呼ぶなら {blackDeal.deal.inspectCost}G だ」
+                  </div>
+
+                  <div className="bg-gray-950 border border-red-800/40 rounded-xl p-4 mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-4xl">{blackDeal.deal.part?.emoji ?? "❓"}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white font-bold text-sm">{blackDeal.deal.part?.name ?? "???"}</div>
+                        <div className="text-[10px] text-gray-500">RARITY: {blackDeal.deal.part?.rarity}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-red-300 font-bold text-lg">{blackDeal.deal.price}G</div>
+                        <div className="text-[10px] text-gray-500 line-through">相場 {blackDeal.deal.basePrice}G</div>
+                        <div className="text-[10px] text-amber-400">▼{blackDeal.deal.discountPct}% OFF</div>
+                      </div>
+                    </div>
+
+                    {/* 鑑定結果 */}
+                    {blackDeal.deal.inspected && blackDeal.deal.legit !== null && !blackDeal.deal.outcome && (
+                      <div className={`mt-3 text-xs rounded-lg p-2 border ${blackDeal.deal.legit
+                        ? "text-emerald-300 bg-emerald-900/20 border-emerald-700/40"
+                        : "text-red-300 bg-red-900/30 border-red-700/50"}`}>
+                        🔍 鑑定済み: {blackDeal.deal.legit ? "✅ 真正品 — 買いだ" : "⚠️ 粗悪品(スキャム) — 手を出すな"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 決着前: アクション */}
+                  {!blackDeal.deal.outcome && !dealResult && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => dealAction("inspect")}
+                          disabled={dealBusy || blackDeal.deal.inspected}
+                          className="py-2.5 rounded-lg text-xs font-bold border border-cyan-700/60 text-cyan-300 bg-cyan-950/40 disabled:opacity-40"
+                        >
+                          🔍 鑑定する (−{blackDeal.deal.inspectCost}G)
+                        </button>
+                        <button
+                          onClick={() => dealAction("buy")}
+                          disabled={dealBusy || (blackDeal.deal.inspected && blackDeal.deal.legit === false)}
+                          className="py-2.5 rounded-lg text-xs font-bold border border-red-700/60 text-red-300 bg-red-950/40 disabled:opacity-40"
+                        >
+                          💰 買う (−{blackDeal.deal.price}G)
+                        </button>
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-2 text-center">
+                        所持: {blackDeal.deal.gcoins}G ・ 見送るのも取引のうちだ(明日また来い)
+                      </div>
+                    </>
+                  )}
+
+                  {/* 決着後 */}
+                  {(blackDeal.deal.outcome || dealResult) && (
+                    <div className={`rounded-xl p-4 text-center border ${
+                      (dealResult?.outcome ?? blackDeal.deal.outcome) === "SCAMMED"
+                        ? "bg-red-950/50 border-red-600/60"
+                        : "bg-emerald-950/40 border-emerald-600/50"}`}>
+                      <div className="text-3xl mb-1">
+                        {(dealResult?.outcome ?? blackDeal.deal.outcome) === "SCAMMED" ? "💸" : (dealResult?.outcome ?? blackDeal.deal.outcome) === "WIN_JACKPOT" ? "🤑" : "🎁"}
+                      </div>
+                      <div className={`font-bold text-sm mb-2 ${(dealResult?.outcome ?? blackDeal.deal.outcome) === "SCAMMED" ? "text-red-300" : "text-emerald-300"}`}>
+                        {(dealResult?.outcome ?? blackDeal.deal.outcome) === "SCAMMED" ? "取引失敗 — 掴まされた"
+                          : (dealResult?.outcome ?? blackDeal.deal.outcome) === "WIN_JACKPOT" ? `転売成功 +${dealResult?.jackpot ?? ""}G` : "取引成立 — 格安入手"}
+                      </div>
+                      {dealResult?.lesson && (
+                        <div className="text-[11px] text-gray-400 leading-relaxed">{dealResult.lesson}</div>
+                      )}
+                      {dealResult?.rawDataGained ? (
+                        <div className="text-[10px] text-cyan-500 mt-1">慰謝料: 生データ +{dealResult.rawDataGained}</div>
+                      ) : null}
+                      <div className="text-[10px] text-gray-600 mt-2">次の取引は明日</div>
+                    </div>
+                  )}
+
+                  {dealMsg && (
+                    <div className="mt-2 text-xs text-cyan-300 bg-cyan-900/20 rounded-lg p-2">{dealMsg}</div>
+                  )}
+
+                  <div className="mt-3 pt-2 border-t border-red-900/30 text-[10px] text-gray-600 leading-relaxed">
+                    ◈ Optisのメモ: 「うまい話ほど裏を取る。鑑定料は"情報のコスト"──
+                    プロの投資家がアナリストに金を払うのと同じ理屈だ」
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── CLOSET ────────────────────────────────────────────── */}
         {tab === "closet" && (
           <div className="space-y-3">
@@ -1797,6 +1990,42 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
         {/* ── STATUS ────────────────────────────────────────────── */}
         {tab === "status" && (
           <div className="space-y-3">
+            {/* ハッカーREP(名声) */}
+            {darkRep && (
+              <div className="border border-amber-700/50 rounded-xl p-4 bg-black/50 font-mono">
+                <div className="text-[11px] text-amber-500 tracking-widest mb-2">// HACKER_REPUTATION</div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-3xl">{darkRep.rank.emoji}</span>
+                  <div className="flex-1">
+                    <div className="text-amber-300 font-bold text-sm">{darkRep.rank.name}</div>
+                    <div className="text-[10px] text-amber-500/80">REP {darkRep.rep}</div>
+                  </div>
+                  {darkRep.next && (
+                    <div className="text-right text-[10px] text-gray-500">
+                      次: {darkRep.next.rank.emoji} {darkRep.next.rank.name}<br />あと {darkRep.next.remaining}
+                    </div>
+                  )}
+                </div>
+                {darkRep.next && (
+                  <div className="h-1.5 bg-amber-950 rounded-full overflow-hidden mb-3">
+                    <div className="h-full bg-gradient-to-r from-amber-600 to-yellow-400"
+                      style={{ width: `${Math.min(100, Math.round((darkRep.rep / darkRep.next.rank.minRep) * 100))}%` }} />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {darkRep.breakdown.map(b => (
+                    <div key={b.label} className="flex justify-between text-[11px]">
+                      <span className="text-gray-500">{b.label} ×{b.count}</span>
+                      <span className="text-amber-400">+{b.rep}</span>
+                    </div>
+                  ))}
+                  {darkRep.breakdown.length === 0 && (
+                    <div className="text-[11px] text-gray-600">まだ実績なし──解読・暗号解除・撃破・密造でREPを稼げ</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* DARK CHARGE — 匿名スポンサー(親)からの裏口座送金 */}
             {learning && (learning.parentAlertAt || learning.parentBoosted) && (
               <div className="border border-fuchsia-500/50 rounded-xl p-4 bg-black/50">
@@ -1953,9 +2182,9 @@ export default function DarkWebPanel({ optis, onExit, onChanged }: DarkWebPanelP
               {generation > 1 && (
                 <div className="mt-4 pt-3 border-t border-cyan-900/40">
                   <div className="text-[10px] text-fuchsia-500 tracking-widest mb-1">// GENERATION_BONUS</div>
-                  <div className="text-xs text-fuchsia-300 font-mono">EXP_MULTIPLIER: ×{(1 + (generation - 1) * 0.1).toFixed(1)}</div>
-                  <div className="text-xs text-fuchsia-300 font-mono">DARK_WEB_HOUR: {generation >= 5 ? "19:00" : generation >= 3 ? "20:00" : "21:00"}〜</div>
-                  <div className="text-xs text-fuchsia-300 font-mono">ADVICE_LEVEL: {generation >= 2 ? "ADVANCED" : "BASIC"}</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">EXP_MULTIPLIER: ×{generationBonus(generation).expMultiplier.toFixed(1)}</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">DARK_WEB_HOUR: {generationBonus(generation).darkWebHour}:00〜</div>
+                  <div className="text-xs text-fuchsia-300 font-mono">ADVICE_LEVEL: {generationBonus(generation).advancedAdvice ? "ADVANCED" : "BASIC"}</div>
                 </div>
               )}
             </div>

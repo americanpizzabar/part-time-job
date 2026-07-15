@@ -739,7 +739,7 @@ export default function OptisLabPage() {
             ⚡ エネルギー残り {optis.stamina.hoursLeft} 時間…会計かランチ写真の記録で回復
           </div>
         )}
-        {isDarkWebHour() && !optis.frozen && !optis.stamina?.starving && (
+        {isDarkWebHour(new Date(), optis.generation) && !optis.frozen && !optis.stamina?.starving && (
           <div className="mt-2 text-[10px] text-cyan-300/70 neon-flicker">コアを3秒長押し…？</div>
         )}
       </div>
