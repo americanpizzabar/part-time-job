@@ -17,6 +17,8 @@ import QuizBanner from "@/components/QuizBanner";
 import DataPod from "@/components/DataPod";
 import BreakdownDrawer, { BreakdownRow } from "@/components/BreakdownDrawer";
 import SiblingBattleCard from "@/components/SiblingBattleCard";
+import SimpleHome from "@/components/SimpleHome";
+import { useSimpleMode, getStoredSimpleMode } from "@/lib/useSimpleMode";
 
 interface OptisData {
   experience: number;
@@ -105,6 +107,7 @@ export default function OptisLabPage() {
   const [quizBonusOn, setQuizBonusOn] = useState(false);
   const [evolution, setEvolution] = useState<{ fromForm: OptisForm; fromStage: 1 | 2 | 3; toForm: OptisForm; toStage: 1 | 2 | 3 } | null>(null);
   const { role, mounted: roleMounted } = useRole();
+  const { simple: simpleUi, mounted: simpleMounted } = useSimpleMode();
   const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevEvoRef = useRef<{ form: OptisForm; stage: 1 | 2 | 3 } | null>(null);
@@ -151,6 +154,8 @@ export default function OptisLabPage() {
   }, [detectEvo]);
 
   useEffect(() => {
+    // 簡易モード(キャッシュ判定)ならスリムホームが自前で取得するため重いフェッチをスキップ
+    if (getStoredSimpleMode()) return;
     fetchAll();
     // Fetch today's keyword
     fetch("/api/keyword")
@@ -454,6 +459,12 @@ export default function OptisLabPage() {
     } finally {
       setMercariSaving(false);
     }
+  }
+
+  // 簡易モード: お手伝い+お年玉だけのスリムホーム。
+  // Optis・クイズ・宝箱・ダークウェブ(コア長押し)は一切レンダリングしない。
+  if (simpleMounted && simpleUi) {
+    return <SimpleHome />;
   }
 
   if (!optis) {

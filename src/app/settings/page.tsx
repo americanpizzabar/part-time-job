@@ -9,7 +9,7 @@ interface Config {
   aggregation: {
     id: number; periodDays: number; startDayOfWeek: number; weeklyBudget: number | null;
     quizBonusPerCorrect?: number; quizBonusDailyCap?: number | null; quizBonusHardBoost?: number;
-    quizPenaltyAmount?: number; staminaEnabled?: boolean;
+    quizPenaltyAmount?: number; staminaEnabled?: boolean; simpleUi?: boolean;
   } | null;
 }
 

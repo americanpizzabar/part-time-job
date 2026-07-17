@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSimpleMode } from "@/lib/useSimpleMode";
 
-const links = [
+const fullLinks = [
   { href: "/", label: "ホーム", icon: "🏠" },
   { href: "/tasks", label: "お手伝い", icon: "📅" },
   { href: "/budget", label: "かけいぼ", icon: "📒" },
@@ -12,10 +13,22 @@ const links = [
   { href: "/more", label: "メニュー", icon: "☰" },
 ];
 
-const moreRoutes = ["/collection", "/projects", "/allowance", "/stats", "/settings", "/parent", "/chronicle", "/portfolio", "/manual"];
+// 簡易モード: お手伝い+お年玉に絞ったスリムなナビ
+const simpleLinks = [
+  { href: "/", label: "ホーム", icon: "🏠" },
+  { href: "/tasks", label: "お手伝い", icon: "📅" },
+  { href: "/gift", label: "お年玉", icon: "🧧" },
+  { href: "/more", label: "メニュー", icon: "☰" },
+];
+
+const moreRoutes = ["/collection", "/projects", "/allowance", "/stats", "/settings", "/parent", "/chronicle", "/portfolio", "/manual", "/gift", "/chores"];
 
 export default function NavBar() {
   const pathname = usePathname();
+  const { simple } = useSimpleMode();
+  const links = simple ? simpleLinks : fullLinks;
+  // 簡易モードでは /gift がタブになるため「メニュー配下」から外す
+  const menuRoutes = simple ? moreRoutes.filter(r => r !== "/gift") : moreRoutes;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
@@ -25,7 +38,7 @@ export default function NavBar() {
             link.href === "/"
               ? pathname === "/"
               : link.href === "/more"
-                ? pathname.startsWith("/more") || moreRoutes.some(r => pathname.startsWith(r))
+                ? pathname.startsWith("/more") || menuRoutes.some(r => pathname.startsWith(r))
                 : pathname.startsWith(link.href);
           return (
             <Link

@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 async function assessVirusPenalty(now: Date) {
   const cfg = await prisma.aggregationConfig.findFirst({ orderBy: { id: "asc" } });
   if (!cfg || cfg.quizPenaltyAmount <= 0) return;
+  // 簡易UIモード中はクイズが画面に出ないため、未回答ペナルティも徴収しない
+  if (cfg.simpleUi) return;
 
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);

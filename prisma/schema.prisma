@@ -32,6 +32,8 @@ model AggregationConfig {
   quizPenaltyAmount   Float   @default(0)
   // Optisスタミナ: 24時間以内に会計/ランチ写真が無いと飢餓状態(裏モード・ルーレット封鎖)
   staminaEnabled      Boolean @default(false)
+  // 簡易UI: 子供の画面をお手伝い+お年玉だけにスリム化(ダークウェブ等も非表示)
+  simpleUi            Boolean @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   familyId  String   @default("default-family") // マルチテナント: 家族コンテナID

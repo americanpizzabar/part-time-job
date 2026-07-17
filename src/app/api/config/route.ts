@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   }
 
   if (aggregation) {
-    const { periodDays, startDayOfWeek, weeklyBudget, quizBonusPerCorrect, quizBonusDailyCap, quizBonusHardBoost, quizPenaltyAmount, staminaEnabled } = aggregation;
+    const { periodDays, startDayOfWeek, weeklyBudget, quizBonusPerCorrect, quizBonusDailyCap, quizBonusHardBoost, quizPenaltyAmount, staminaEnabled, simpleUi } = aggregation;
     // 重複行があると保存先と読出元がズレるため、最古の1行に統一し余剰行は削除する
     const all = await prisma.aggregationConfig.findMany({ orderBy: { id: "asc" } });
     const existing = all[0] ?? null;
@@ -57,6 +57,7 @@ export async function POST(req: Request) {
             ...(quizBonusHardBoost !== undefined && { quizBonusHardBoost: Number(quizBonusHardBoost) || 0 }),
             ...(quizPenaltyAmount !== undefined && { quizPenaltyAmount: Number(quizPenaltyAmount) || 0 }),
             ...(staminaEnabled !== undefined && { staminaEnabled: !!staminaEnabled }),
+            ...(simpleUi !== undefined && { simpleUi: !!simpleUi }),
           },
         })
       : await prisma.aggregationConfig.create({
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
             quizBonusHardBoost: Number(quizBonusHardBoost) || 0,
             quizPenaltyAmount: Number(quizPenaltyAmount) || 0,
             staminaEnabled: !!staminaEnabled,
+            simpleUi: !!simpleUi,
           },
         });
     results.aggregation = config;

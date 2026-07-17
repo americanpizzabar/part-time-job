@@ -11,6 +11,7 @@ import AccuracyRadar from "@/components/AccuracyRadar";
 import ChildSwitcher from "@/components/ChildSwitcher";
 import FamilyIncentivePanel from "@/components/FamilyIncentivePanel";
 import { useRole } from "@/lib/useRole";
+import { setStoredSimpleMode } from "@/lib/useSimpleMode";
 import { projectProgress, boostPerContribution } from "@/lib/optis";
 
 interface Balance {
@@ -164,9 +165,32 @@ export default function ParentPage() {
   const [restoreCode, setRestoreCode] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [quizBonus, setQuizBonus] = useState<{ pendingTotal: number; correctCount: number; hardPodCount: number; firstDate: string | null; lastDate: string | null } | null>(null);
+  const [simpleUiOn, setSimpleUiOn] = useState(false);
+  const [uiModeSaving, setUiModeSaving] = useState(false);
+  const [uiModeMsg, setUiModeMsg] = useState("");
   const { role, mounted } = useRole();
 
   const { start, end } = currentMonthRange();
+
+  // アプリモード(全機能/簡易)の保存: サーバーへ永続化 + 端末キャッシュ即時反映
+  async function saveUiMode(simple: boolean) {
+    setUiModeSaving(true);
+    try {
+      const r = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aggregation: { simpleUi: simple } }),
+      });
+      if (r.ok) {
+        setSimpleUiOn(simple);
+        setStoredSimpleMode(simple);
+        setUiModeMsg(simple ? "✅ 簡易版に切り替えました(お子様の端末は次回開いたときに反映)" : "✅ 全機能版に切り替えました");
+        setTimeout(() => setUiModeMsg(""), 4000);
+      }
+    } finally {
+      setUiModeSaving(false);
+    }
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -202,6 +226,7 @@ export default function ParentPage() {
       fetch("/api/learning/accuracy").then(r => r.json()).then(d => setAccuracy(Array.isArray(d?.genres) ? d : null)).catch(() => {});
       fetch("/api/backup").then(r=>r.json()).then(setBackupInfo).catch(()=>{});
       fetch("/api/quiz-bonus").then(r=>r.json()).then(setQuizBonus).catch(()=>{});
+      fetch("/api/config").then(r=>r.json()).then(cfg=>setSimpleUiOn(!!cfg.aggregation?.simpleUi)).catch(()=>{});
     } finally {
       setLoading(false);
     }
@@ -414,6 +439,36 @@ export default function ParentPage() {
           お子さんのプライバシーに配慮し、表示は残高・総額・割合のみです。
           個別の購入履歴（非公開設定分）は表示されません。
         </p>
+      </div>
+
+      {/* お子様のアプリモード(全機能版/簡易版) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-bold text-gray-800 mb-1">お子様のアプリモード</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          簡易版にすると、お子様の画面は「お手伝い」と「お年玉・お祝い金」だけのシンプルな表示になります。
+          かけいぼ・目標・おねだり・キャラクター育成・クイズ・裏モードなどはすべて非表示になります。
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => saveUiMode(false)}
+            disabled={uiModeSaving}
+            className={`py-3 rounded-xl text-sm font-bold border-2 transition-colors disabled:opacity-50
+              ${!simpleUiOn ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-400"}`}
+          >
+            🎮 全機能版
+            <div className="text-[10px] font-normal mt-0.5">ゲーム・学習ぜんぶ入り</div>
+          </button>
+          <button
+            onClick={() => saveUiMode(true)}
+            disabled={uiModeSaving}
+            className={`py-3 rounded-xl text-sm font-bold border-2 transition-colors disabled:opacity-50
+              ${simpleUiOn ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 text-gray-400"}`}
+          >
+            🍃 簡易版
+            <div className="text-[10px] font-normal mt-0.5">お手伝い＋お年玉のみ</div>
+          </button>
+        </div>
+        {uiModeMsg && <div className="text-xs text-green-600 mt-2 text-center">{uiModeMsg}</div>}
       </div>
 
       {/* コックピット型 子供切り替えタブ(子が2人以上のとき表示) */}
